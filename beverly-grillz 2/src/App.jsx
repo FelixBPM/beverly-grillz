@@ -494,9 +494,6 @@ function HomePage({ config, setPage }) {
         <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')} style={{ background: 'linear-gradient(135deg, #8B6040, #6B4020)' }}>
           Returning Alumna/Alumnus →
         </button>
-        <button className="ev-btn ev-btn-dark" onClick={() => setPage('packing')}>
-          What to Pack
-        </button>
       </div>
       {config.tagline && <p className="ev-hero-tagline">"{config.tagline}"</p>}
       {!config.tagline && (
@@ -594,12 +591,6 @@ function ApplicationForm({
     onSuccess();
   };
 
-  const dayGroups = shifts.reduce((acc, sh) => {
-    if (!acc[sh.day]) acc[sh.day] = [];
-    acc[sh.day].push(sh);
-    return acc;
-  }, {});
-
   if (!config.applicationsOpen && !isRsvp) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 0', color: '#6B5749' }}>
@@ -639,49 +630,6 @@ function ApplicationForm({
         <label className="ev-label">Emergency Contact *</label>
         <input className="ev-input" placeholder="Name & phone number" {...field('emergency')} />
         {errors.emergency && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.emergency}</p>}
-      </div>
-
-      {/* Shift selection */}
-      <div style={{ marginBottom: 28 }}>
-        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>
-          Shifts — pick at least {config.shiftRequirement}
-        </label>
-        <p style={{ fontSize: 13, color: '#6B5749', marginBottom: 16 }}>
-          Everyone contributes. Choose the shifts that work for your schedule.
-        </p>
-        {Object.entries(dayGroups).map(([day, dayShifts]) => (
-          <div key={day} style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C8956C', marginBottom: 8 }}>{day}</p>
-            {dayShifts.map(sh => {
-              const full = sh.signups.length >= sh.capacity;
-              const picked = selectedShifts.includes(sh.id);
-              return (
-                <label key={sh.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                  background: picked ? '#1A0E08' : '#0F0805',
-                  border: `1px solid ${picked ? '#C8956C' : '#1E100A'}`,
-                  borderRadius: 8, marginBottom: 6, cursor: full ? 'not-allowed' : 'pointer',
-                  opacity: full && !picked ? .5 : 1,
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={picked}
-                    disabled={full && !picked}
-                    onChange={() => toggleShift(sh.id)}
-                    style={{ accentColor: '#C8956C' }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500 }}>{sh.name}</div>
-                    <div style={{ fontSize: 12, color: '#6B5749' }}>{sh.time}</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: full ? '#8B3020' : '#6B5749', whiteSpace: 'nowrap' }}>
-                    {sh.signups.length}/{sh.capacity} {full ? '· Full' : ''}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        ))}
       </div>
 
       {/* Agreements */}
@@ -789,47 +737,13 @@ function RSVPPage({ config, shifts, setShifts, applications, setApplications, me
 // SHIFTS PAGE
 // ============================================================
 
-function ShiftsPage({ shifts, me }) {
+function ShiftsPage() {
   return (
     <div className="ev-page">
       <h1 className="ev-section-h">Shifts</h1>
-      <p className="ev-section-sub">Everyone pitches in. Thank you for being part of the crew.</p>
-
       <div className="ev-shifts-notice">
-        <h2>Shift Sign-Ups Coming Soon</h2>
-        <p>The shift calendar will be released on August 1st.</p>
+        <h2>Shift Calendar Will Be Released 8/1/26</h2>
       </div>
-
-      {shifts.length > 0 && (() => {
-        const dayGroups = shifts.reduce((acc, sh) => {
-          if (!acc[sh.day]) acc[sh.day] = [];
-          acc[sh.day].push(sh);
-          return acc;
-        }, {});
-        const myId = me?.id;
-        return Object.entries(dayGroups).map(([day, dayShifts]) => (
-          <div key={day} style={{ marginBottom: 28 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C8956C', marginBottom: 10 }}>{day}</p>
-            {dayShifts.map(sh => {
-              const isMine = myId && sh.signups.some(s => s.id === myId);
-              const full = sh.signups.length >= sh.capacity;
-              return (
-                <div key={sh.id} className="ev-shift-card">
-                  <div className="ev-shift-info">
-                    <h3>{sh.name} {isMine && <span style={{ color: '#C8956C', fontSize: 12 }}>✓ You</span>}</h3>
-                    <p>{sh.time}</p>
-                  </div>
-                  <div className="ev-shift-meta">
-                    <span style={{ color: full ? '#8B3020' : '#6B5749' }}>
-                      {sh.signups.length}/{sh.capacity}{full ? ' · Full' : ''}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ));
-      })()}
     </div>
   );
 }
@@ -1246,7 +1160,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const [cfg, sh, pk, rs, ap, cal, mUsr, pcChk, unl] = await Promise.all([
+      const [cfg, sh, pk, rs, ap, cal, mUsr, pcChk] = await Promise.all([
         load('config', DEFAULT_CONFIG, true),
         load('shifts', DEFAULT_SHIFTS, true),
         load('packing', DEFAULT_PACKING, true),
@@ -1255,7 +1169,6 @@ export default function App() {
         load('calendar', DEFAULT_CALENDAR, true),
         load('me', null, false),
         load('packingChecks', {}, false),
-        load('unlocked', false, false),
       ]);
       setConfig(cfg);
       setShifts(sh);
@@ -1265,13 +1178,11 @@ export default function App() {
       setCalendar(cal);
       setMe(mUsr);
       setPackingChecks(pcChk);
-      setUnlocked(unl);
       setLoading(false);
     })();
   }, []);
 
   const unlock = async () => {
-    await save('unlocked', true, false);
     setUnlocked(true);
   };
 
