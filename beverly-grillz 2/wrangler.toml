@@ -1,9 +1,8 @@
 name = "proud-shape-892abeverly-grillz"
+account_id = "16e857a0040bfc61ccf03fc949183fc1"
 compatibility_date = "2026-04-28"
 
 [assets]
 directory = "./dist"
 html_handling = "auto-trailing-slash"
 not_found_handling = "none"
-serve_directly = true
-# updated
