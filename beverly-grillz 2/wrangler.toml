@@ -1,1 +1,9 @@
+name = "proud-shape-892abeverly-grillz"
+compatibility_date = "2026-04-28"
 
+[assets]
+directory = "./dist"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+serve_directly = true
+# updated
