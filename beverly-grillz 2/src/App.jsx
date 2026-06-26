@@ -59,12 +59,13 @@ const DEFAULT_RESOURCES = [
   { id: 'r3', name: 'Driving Directions', kind: 'pdf', url: '#', description: 'Final approach & GPS coords' },
 ];
 
+const DEFAULT_CALENDAR = [
+  { id: 'c1', date: '8/1/26', label: 'Shift Calendar Sign Up Release' },
+];
+
 // ============================================================
 // STORAGE HELPERS
 // ============================================================
-// Imported from ./storage at the top of the file:
-// shared=true  → Supabase kv_store
-// shared=false → localStorage
 
 const newId = () => 'u' + Math.random().toString(36).slice(2, 10);
 
@@ -112,1006 +113,866 @@ function Giraffe({ size = 100, opacity = 1, style = {}, className = '' }) {
 }
 
 // ============================================================
-// MAIN APP
+// INJECT CSS
 // ============================================================
 
-export default function App() {
-  const [page, setPage] = useState('home');
-  const [loading, setLoading] = useState(true);
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500&display=swap');
 
-  // Shared (everyone sees same)
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
-  const [shifts, setShifts] = useState(DEFAULT_SHIFTS);
-  const [packingItems, setPackingItems] = useState(DEFAULT_PACKING);
-  const [resources, setResources] = useState(DEFAULT_RESOURCES);
-  const [applications, setApplications] = useState([]);
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  // Per-user (only this device/browser)
-  const [me, setMe] = useState(null);
-  const [packingChecks, setPackingChecks] = useState({});
-
-  // Admin state (per-device)
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Lock screen state (per-device)
-  const [unlocked, setUnlocked] = useState(false);
-
-  useEffect(() => { (async () => {
-    const [cfg, sh, pk, rs, ap, mUsr, pcChk, unl] = await Promise.all([
-      load('config', DEFAULT_CONFIG, true),
-      load('shifts', DEFAULT_SHIFTS, true),
-      load('packing', DEFAULT_PACKING, true),
-      load('resources', DEFAULT_RESOURCES, true),
-      load('applications', [], true),
-      load('me', null, false),
-      load('packingChecks', {}, false),
-      load('unlocked', false, false),
-    ]);
-    setConfig(cfg); setShifts(sh); setPackingItems(pk);
-    setResources(rs); setApplications(ap);
-    setMe(mUsr); setPackingChecks(pcChk);
-    setUnlocked(unl);
-    setLoading(false);
-  })(); }, []);
-
-  // Update helpers
-  const updateConfig = async (c) => { setConfig(c); await save('config', c, true); };
-  const updateShifts = async (s) => { setShifts(s); await save('shifts', s, true); };
-  const updatePacking = async (p) => { setPackingItems(p); await save('packing', p, true); };
-  const updateResources = async (r) => { setResources(r); await save('resources', r, true); };
-  const updateApplications = async (a) => { setApplications(a); await save('applications', a, true); };
-  const updateMe = async (m) => { setMe(m); await save('me', m, false); };
-  const updatePackingChecks = async (pc) => { setPackingChecks(pc); await save('packingChecks', pc, false); };
-  const updateUnlocked = async (u) => { setUnlocked(u); await save('unlocked', u, false); };
-
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#0F0805', fontFamily: 'Cormorant Garamond, Georgia, serif', fontSize: 22, color: '#FF8438',
-        fontStyle: 'italic', letterSpacing: '0.04em'
-      }}>
-        Lighting the fires…
-      </div>
-    );
+  body {
+    background: #100804;
+    color: #FBF0E0;
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
   }
 
-  if (!unlocked) {
-    return <LockScreen config={config} onUnlock={() => updateUnlocked(true)} />;
+  /* --- NAV --- */
+  .ev-nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px;
+    height: 52px;
+    background: rgba(10,5,2,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #1E100A;
+  }
+  .ev-nav-brand {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px; font-weight: 500; letter-spacing: .03em;
+    color: #FBF0E0; text-decoration: none;
+    cursor: pointer;
+  }
+  .ev-nav-tabs { display: flex; align-items: center; gap: 2px; }
+  .ev-nav-tab {
+    padding: 6px 14px; border-radius: 20px; border: none;
+    background: transparent; color: #A88876;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: color .15s, background .15s;
+  }
+  .ev-nav-tab:hover { color: #FBF0E0; background: #1A0E08; }
+  .ev-nav-tab.active { background: #C8956C; color: #100804; }
+  .ev-nav-lock {
+    background: none; border: none; cursor: pointer;
+    color: #6B5749; font-size: 16px; padding: 6px; transition: color .15s;
+  }
+  .ev-nav-lock:hover { color: #C8956C; }
+
+  /* --- PAGE WRAPPER --- */
+  .ev-page { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+  .ev-page-wide { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* --- BUTTONS --- */
+  .ev-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 10px 22px; border-radius: 100px;
+    font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: none; transition: opacity .15s, transform .1s;
+  }
+  .ev-btn:active { transform: scale(.97); }
+  .ev-btn-primary {
+    background: linear-gradient(135deg, #D4894E, #C06830);
+    color: #100804;
+  }
+  .ev-btn-primary:hover { opacity: .9; }
+  .ev-btn-ghost {
+    background: transparent;
+    border: 1px solid #3A2010;
+    color: #C8956C;
+  }
+  .ev-btn-ghost:hover { border-color: #C8956C; color: #FBF0E0; }
+  .ev-btn-dark {
+    background: #1A0E08;
+    border: 1px solid #2A1810;
+    color: #FBF0E0;
+  }
+  .ev-btn-dark:hover { background: #231208; }
+  .ev-btn-small { padding: 6px 14px; font-size: 12px; }
+  .ev-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* --- FORM ELEMENTS --- */
+  .ev-input, .ev-select, .ev-textarea {
+    width: 100%; padding: 10px 14px;
+    background: #0F0805; border: 1px solid #2A1810; border-radius: 8px;
+    color: #FBF0E0; font-family: 'Inter', sans-serif; font-size: 14px;
+    outline: none; transition: border-color .15s;
+  }
+  .ev-input:focus, .ev-select:focus, .ev-textarea:focus { border-color: #C8956C; }
+  .ev-input::placeholder, .ev-textarea::placeholder { color: #4A3020; }
+  .ev-textarea { resize: vertical; min-height: 80px; }
+  .ev-select option { background: #1A0E08; }
+  .ev-label {
+    display: block; font-size: 13px; color: #A88876;
+    margin-bottom: 6px; font-weight: 500;
+  }
+  .ev-field { margin-bottom: 16px; }
+
+  /* --- CARDS --- */
+  .ev-card {
+    background: #0F0805; border: 1px solid #1E100A;
+    border-radius: 12px; padding: 20px;
+    margin-bottom: 12px;
   }
 
-  const PAGES = {
-    home: <Home config={config} setPage={setPage} me={me} />,
-    apply: <Apply config={config} me={me} updateMe={updateMe} applications={applications} updateApplications={updateApplications} setPage={setPage} />,
-    shifts: <Shifts shifts={shifts} updateShifts={updateShifts} me={me} requirement={config.shiftRequirement} setPage={setPage} />,
-    resources: <Resources resources={resources} />,
-    packing: <Packing items={packingItems} checks={packingChecks} updateChecks={updatePackingChecks} />,
-    admin: <Admin
-      isAdmin={isAdmin} setIsAdmin={setIsAdmin}
-      config={config} updateConfig={updateConfig}
-      shifts={shifts} updateShifts={updateShifts}
-      packingItems={packingItems} updatePacking={updatePacking}
-      resources={resources} updateResources={updateResources}
-      applications={applications} updateApplications={updateApplications}
-    />,
-  };
+  /* --- ADMIN --- */
+  .ev-admin-section { margin-bottom: 40px; }
+  .ev-admin-section h3 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 500; color: #FBF0E0;
+    margin-bottom: 16px; padding-bottom: 8px;
+    border-bottom: 1px solid #1E100A;
+  }
+  .ev-admin-tabs { display: flex; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
+  .ev-admin-tab {
+    padding: 8px 18px; border-radius: 20px; border: 1px solid #2A1810;
+    background: transparent; color: #A88876;
+    font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s;
+  }
+  .ev-admin-tab.active { background: #1E100A; border-color: #C8956C; color: #FBF0E0; }
 
-  return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Outfit:wght@300;400;500;600;700&display=swap');
+  /* --- MODAL --- */
+  .ev-modal-backdrop {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .ev-modal {
+    background: #1A0E08; border: 1px solid #3A2010;
+    border-radius: 16px; padding: 36px; max-width: 420px; width: 100%;
+    text-align: center;
+  }
+  .ev-modal h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px; font-weight: 500; color: #FBF0E0; margin-bottom: 12px;
+  }
+  .ev-modal p { color: #A88876; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
 
-        * { box-sizing: border-box; }
-        .ev-app {
-          min-height: 100vh;
-          background: #0F0805;
-          color: #FBF0E0;
-          font-family: 'Outfit', system-ui, sans-serif;
-          font-size: 16px;
-          line-height: 1.55;
-          background-image:
-            radial-gradient(ellipse 60% 40% at 15% 0%, rgba(255, 107, 26, 0.10), transparent 70%),
-            radial-gradient(ellipse 50% 50% at 90% 100%, rgba(199, 62, 29, 0.10), transparent 70%),
-            radial-gradient(ellipse 80% 30% at 50% 100%, rgba(255, 182, 39, 0.05), transparent 70%);
-        }
-        .ev-display { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
-        .ev-italic { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 400; }
+  /* --- LOCK SCREEN --- */
+  .ev-lock {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: radial-gradient(ellipse at 50% 30%, #1E0E06 0%, #100804 70%);
+  }
+  .ev-lock-box { text-align: center; max-width: 340px; width: 100%; }
+  .ev-lock-box h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 36px; font-weight: 400; color: #FBF0E0; margin: 16px 0 6px;
+  }
+  .ev-lock-box p { color: #6B5749; font-size: 13px; margin-bottom: 28px; }
 
-        .ev-container { max-width: 880px; margin: 0 auto; padding: 24px; }
+  /* --- HOME --- */
+  .ev-hero {
+    min-height: calc(100vh - 52px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 48px 24px;
+    background: radial-gradient(ellipse at 50% 40%, #1C0E06 0%, #100804 65%);
+  }
+  .ev-hero-badge {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    background: #C8956C; color: #100804;
+    font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .ev-hero h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(52px, 8vw, 88px); font-weight: 400; line-height: 1;
+    color: #FBF0E0; margin-bottom: 6px;
+  }
+  .ev-hero h1 em { color: #C8956C; font-style: italic; }
+  .ev-hero-tagline {
+    color: #6B5749; font-style: italic;
+    font-family: 'Cormorant Garamond', serif; font-size: 16px;
+    margin-top: 32px;
+  }
+  .ev-hero-desc {
+    max-width: 480px; color: #A88876; font-size: 15px; line-height: 1.7;
+    margin: 16px auto 0;
+  }
+  .ev-hero-meta {
+    margin-top: 20px; display: flex; gap: 20px; justify-content: center;
+    flex-wrap: wrap; color: #6B5749; font-size: 13px;
+  }
+  .ev-hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .ev-hero-actions { display: flex; gap: 12px; margin-top: 36px; flex-wrap: wrap; justify-content: center; }
 
-        /* HEADER */
-        .ev-header {
-          padding: 18px 24px;
-          border-bottom: 1px solid #2A1810;
-          background: rgba(15, 8, 5, 0.85);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          position: sticky; top: 0; z-index: 50;
-        }
-        .ev-header-row { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-        .ev-logo {
-          font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 500;
-          letter-spacing: -0.01em; color: #FBF0E0; cursor: pointer;
-          display: flex; align-items: center; gap: 10px;
-        }
-        .ev-logo .dot {
-          background: linear-gradient(135deg, #FFB627, #FF6B1A 50%, #C73E1D);
-          -webkit-background-clip: text; background-clip: text;
-          -webkit-text-fill-color: transparent;
-          font-style: italic;
-        }
-        .ev-nav { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; }
-        .ev-nav button {
-          background: none; border: none; cursor: pointer;
-          padding: 8px 14px; border-radius: 999px;
-          font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500;
-          color: #A88876; transition: all 0.18s ease;
-          letter-spacing: 0.02em;
-        }
-        .ev-nav button:hover { background: #1F1108; color: #FBF0E0; }
-        .ev-nav button.active {
-          background: linear-gradient(135deg, #FF6B1A, #C73E1D);
-          color: #FBF0E0;
-          box-shadow: 0 4px 16px rgba(255, 107, 26, 0.25);
-        }
+  /* --- FORM PAGE --- */
+  .ev-form-header { margin-bottom: 32px; }
+  .ev-form-header h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 38px; font-weight: 400; color: #FBF0E0; margin-bottom: 8px;
+  }
+  .ev-form-header p { color: #A88876; font-size: 14px; line-height: 1.6; }
 
-        /* BUTTONS */
-        .ev-btn {
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 12px 24px; border-radius: 999px;
-          font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 600;
-          border: none; cursor: pointer; transition: all 0.18s ease;
-          letter-spacing: 0.02em;
-        }
-        .ev-btn-primary {
-          background: linear-gradient(135deg, #FFB627 0%, #FF6B1A 50%, #C73E1D 100%);
-          color: #150905;
-          box-shadow: 0 6px 24px rgba(255, 107, 26, 0.3);
-        }
-        .ev-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(255, 107, 26, 0.45); }
-        .ev-btn-primary:disabled { background: #3A2418; color: #6B5749; cursor: not-allowed; box-shadow: none; transform: none; }
-        .ev-btn-accent {
-          background: #FF6B1A; color: #150905;
-        }
-        .ev-btn-accent:hover { background: #FF8438; }
-        .ev-btn-ghost { background: transparent; color: #FBF0E0; border: 1px solid #3A2418; }
-        .ev-btn-ghost:hover { background: #1F1108; border-color: #5A3818; }
-        .ev-btn-small { padding: 6px 14px; font-size: 12px; }
+  /* --- SHIFTS --- */
+  .ev-shifts-notice {
+    background: #0F0805; border: 1px solid #2A1810; border-radius: 12px;
+    padding: 28px 24px; text-align: center; margin-bottom: 24px;
+  }
+  .ev-shifts-notice h2 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px; font-weight: 400; color: #FBF0E0; margin-bottom: 10px;
+  }
+  .ev-shifts-notice p { color: #A88876; font-size: 14px; line-height: 1.6; }
+  .ev-shift-card {
+    background: #0F0805; border: 1px solid #1E100A; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .ev-shift-info h3 { font-size: 15px; font-weight: 500; color: #FBF0E0; margin-bottom: 2px; }
+  .ev-shift-info p { font-size: 13px; color: #6B5749; }
+  .ev-shift-meta { font-size: 12px; color: #A88876; white-space: nowrap; }
 
-        /* CARDS */
-        .ev-card {
-          background: #1A0E08;
-          border: 1px solid #2A1810;
-          border-radius: 12px;
-          padding: 24px;
-          margin-bottom: 16px;
-        }
-        .ev-card-tight { padding: 16px; }
+  /* --- RESOURCES --- */
+  .ev-resource-card {
+    background: #0F0805; border: 1px solid #1E100A; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    text-decoration: none; transition: border-color .15s;
+  }
+  .ev-resource-card:hover { border-color: #3A2010; }
+  .ev-resource-info h3 { font-size: 15px; font-weight: 500; color: #FBF0E0; margin-bottom: 2px; }
+  .ev-resource-info p { font-size: 13px; color: #6B5749; }
+  .ev-resource-kind {
+    font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: #C8956C; white-space: nowrap;
+  }
 
-        /* INPUTS */
-        .ev-label {
-          display: block; font-size: 11px; font-weight: 600; color: #C8956C;
-          margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.12em;
-          font-family: 'Outfit', sans-serif;
-        }
-        .ev-input, .ev-textarea, .ev-select {
-          width: 100%;
-          padding: 12px 14px;
-          background: #0F0805;
-          border: 1px solid #3A2418;
-          border-radius: 8px;
-          font-family: 'Outfit', sans-serif;
-          font-size: 15px;
-          color: #FBF0E0;
-          transition: border 0.18s ease;
-        }
-        .ev-input:focus, .ev-textarea:focus, .ev-select:focus { outline: none; border-color: #FF6B1A; box-shadow: 0 0 0 3px rgba(255, 107, 26, 0.12); }
-        .ev-input::placeholder, .ev-textarea::placeholder { color: #6B5749; }
-        .ev-textarea { resize: vertical; min-height: 90px; }
+  /* --- PACKING --- */
+  .ev-packing-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 8px; cursor: pointer;
+    transition: background .1s; margin-bottom: 4px;
+  }
+  .ev-packing-item:hover { background: #0F0805; }
+  .ev-packing-item input[type=checkbox] { width: 16px; height: 16px; accent-color: #C8956C; cursor: pointer; }
+  .ev-packing-item span { font-size: 14px; color: #FBF0E0; line-height: 1.4; }
+  .ev-packing-item.checked span { text-decoration: line-through; color: #4A3020; }
 
-        /* CHECKBOX */
-        .ev-check { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
-        .ev-check:hover { background: #1F1108; }
-        .ev-check input { width: 18px; height: 18px; margin-top: 2px; accent-color: #FF6B1A; cursor: pointer; flex-shrink: 0; }
-        .ev-check span { font-size: 15px; line-height: 1.45; color: #E8D0B8; }
+  /* --- DATES --- */
+  .ev-dates-year {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px; font-weight: 400; color: #FBF0E0; margin-bottom: 24px;
+  }
+  .ev-date-row {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 14px 0; border-bottom: 1px solid #1A0C06;
+  }
+  .ev-date-date {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px; color: #C8956C; min-width: 80px; flex-shrink: 0;
+  }
+  .ev-date-label { font-size: 14px; color: #FBF0E0; }
 
-        /* HERO */
-        .ev-hero { padding: 56px 0 40px; text-align: center; position: relative; }
-        .ev-hero h1 { font-size: clamp(52px, 9vw, 96px); line-height: 1; margin: 0 0 8px; font-weight: 500; }
-        .ev-hero h1 em {
-          font-style: italic;
-          background: linear-gradient(135deg, #FFB627 0%, #FF6B1A 50%, #C73E1D 100%);
-          -webkit-background-clip: text; background-clip: text;
-          -webkit-text-fill-color: transparent;
-          font-weight: 400;
-        }
-        .ev-hero .tagline { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 22px; color: #C8956C; margin: 16px 0 4px; }
-        .ev-hero .meta { font-size: 12px; color: #C8956C; letter-spacing: 0.25em; text-transform: uppercase; margin-top: 18px; font-weight: 500; }
-        .ev-hero .lead { font-size: 17px; color: #A88876; max-width: 520px; margin: 28px auto 36px; line-height: 1.6; }
+  /* --- SECTION HEADING --- */
+  .ev-section-h {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px; font-weight: 400; color: #FBF0E0; margin-bottom: 8px;
+  }
+  .ev-section-sub { color: #6B5749; font-size: 14px; margin-bottom: 28px; }
 
-        /* SHIFT */
-        .ev-shift {
-          display: flex; align-items: center; justify-content: space-between; gap: 16px;
-          padding: 18px 22px; background: #1A0E08; border: 1px solid #2A1810; border-radius: 10px;
-          margin-bottom: 10px;
-          transition: border-color 0.18s;
-        }
-        .ev-shift.full { background: #14080A; opacity: 0.55; }
-        .ev-shift.mine {
-          border-color: #FF6B1A;
-          background: linear-gradient(135deg, rgba(255, 107, 26, 0.08), rgba(199, 62, 29, 0.05));
-        }
-        .ev-shift-meta { display: flex; flex-direction: column; gap: 3px; }
-        .ev-shift-name { font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 500; color: #FBF0E0; letter-spacing: -0.01em; }
-        .ev-shift-when { font-size: 13px; color: #C8956C; letter-spacing: 0.04em; }
-        .ev-shift-cap { font-size: 12px; color: #8A7060; font-weight: 500; }
-        .ev-shift-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  /* --- AGREEMENT --- */
+  .ev-agreement {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .ev-agreement input[type=checkbox] { margin-top: 2px; accent-color: #C8956C; flex-shrink: 0; }
+  .ev-agreement span { font-size: 13px; color: #A88876; line-height: 1.5; }
+`;
 
-        .ev-day-heading {
-          font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 400;
-          font-size: 32px; margin: 32px 0 14px;
-          background: linear-gradient(135deg, #FFB627, #FF6B1A);
-          -webkit-background-clip: text; background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-
-        /* RESOURCE */
-        .ev-resource { display: flex; gap: 16px; align-items: center; padding: 16px; background: #1A0E08; border: 1px solid #2A1810; border-radius: 10px; margin-bottom: 10px; }
-        .ev-resource-icon {
-          width: 56px; height: 56px; flex-shrink: 0;
-          background: linear-gradient(135deg, #281510, #1A0E08);
-          border: 1px solid #3A2418;
-          border-radius: 8px;
-          display: flex; align-items: center; justify-content: center;
-          font-family: 'Cormorant Garamond', serif; font-weight: 600;
-          color: #FF8438; font-size: 13px;
-          background-size: cover; background-position: center;
-          letter-spacing: 0.05em;
-        }
-
-        /* PACKING */
-        .ev-pack-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #2A1810; }
-        .ev-pack-row:last-child { border-bottom: none; }
-        .ev-pack-row input { width: 18px; height: 18px; accent-color: #FF6B1A; cursor: pointer; }
-        .ev-pack-row span { font-size: 15px; flex: 1; color: #E8D0B8; }
-        .ev-pack-row span.checked { text-decoration: line-through; color: #6B5749; }
-
-        /* ADMIN */
-        .ev-admin-section { padding: 24px; background: #1A0E08; border: 1px solid #2A1810; border-radius: 12px; margin-bottom: 16px; }
-        .ev-admin-section h3 { font-family: 'Cormorant Garamond', serif; font-size: 26px; margin: 0 0 14px; font-weight: 500; }
-        .ev-admin-row { display: grid; grid-template-columns: 1fr 1fr 1fr 80px auto; gap: 8px; align-items: center; margin-bottom: 8px; }
-
-        /* MISC */
-        .ev-section-title {
-          font-family: 'Cormorant Garamond', serif; font-size: 44px; font-weight: 500;
-          margin: 0 0 8px; letter-spacing: -0.015em; line-height: 1.05;
-        }
-        .ev-section-sub { color: #A88876; margin: 0 0 28px; font-size: 16px; }
-        .ev-pill { display: inline-block; padding: 5px 14px; background: #281510; color: #C8956C; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
-        .ev-pill.green { background: rgba(255, 107, 26, 0.15); color: #FFB627; border: 1px solid rgba(255, 107, 26, 0.3); }
-        .ev-pill.orange { background: linear-gradient(135deg, #FFB627, #FF6B1A); color: #150905; }
-
-        .ev-success { padding: 16px 20px; background: rgba(255, 107, 26, 0.1); color: #FFB627; border: 1px solid rgba(255, 107, 26, 0.25); border-radius: 10px; font-weight: 500; margin-bottom: 16px; }
-        .ev-warn { padding: 16px 20px; background: rgba(199, 62, 29, 0.12); color: #FF8438; border: 1px solid rgba(199, 62, 29, 0.3); border-radius: 10px; margin-bottom: 16px; }
-
-        .ev-divider { height: 1px; background: #2A1810; margin: 24px 0; }
-
-        @media (max-width: 600px) {
-          .ev-shift { flex-direction: column; align-items: flex-start; }
-          .ev-admin-row { grid-template-columns: 1fr; }
-        }
-      `}</style>
-
-      <div className="ev-app">
-        <Header config={config} page={page} setPage={setPage} onLock={() => updateUnlocked(false)} />
-        <div className="ev-container">
-          {PAGES[page]}
-        </div>
-        <Footer />
-      </div>
-    </>
-  );
+function InjectCSS() {
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.textContent = CSS;
+    document.head.appendChild(el);
+    return () => document.head.removeChild(el);
+  }, []);
+  return null;
 }
 
 // ============================================================
-// HEADER & NAV
-// ============================================================
-
-function Header({ config, page, setPage, onLock }) {
-  const tabs = [
-    ['home', 'Home'],
-    ['apply', 'Apply'],
-    ['shifts', 'Shifts'],
-    ['resources', 'Resources'],
-    ['packing', 'Packing'],
-    ['admin', 'Admin'],
-  ];
-  return (
-    <header className="ev-header">
-      <div className="ev-header-row">
-        <div className="ev-logo" onClick={() => setPage('home')}>
-          {config.eventName}<span className="dot">.</span>
-        </div>
-        <nav className="ev-nav">
-          {tabs.map(([k, label]) => (
-            <button key={k} onClick={() => setPage(k)} className={page === k ? 'active' : ''}>
-              {label}
-            </button>
-          ))}
-          <button
-            onClick={onLock}
-            title="Lock app"
-            style={{ marginLeft: 4, padding: '8px 10px', color: '#8A8270' }}
-          >
-            🔒
-          </button>
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-function Footer() {
-  return (
-    <footer style={{ textAlign: 'center', padding: '48px 20px 60px', color: '#6B5749', fontSize: 13, fontStyle: 'italic', fontFamily: 'Cormorant Garamond, serif', letterSpacing: '0.03em' }}>
-      Built for the wanderers who keep returning to the dust.
-    </footer>
-  );
-}
-
-// ============================================================
-// LOCK SCREEN — gates entire app behind event password
+// LOCK SCREEN
 // ============================================================
 
 function LockScreen({ config, onUnlock }) {
   const [pw, setPw] = useState('');
-  const [error, setError] = useState(false);
+  const [err, setErr] = useState(false);
 
-  function tryUnlock() {
+  const attempt = () => {
     if (pw === config.eventPassword) {
-      setError(false);
       onUnlock();
     } else {
-      setError(true);
+      setErr(true);
       setPw('');
+      setTimeout(() => setErr(false), 1500);
     }
-  }
+  };
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&family=Outfit:wght@300;400;500;600&display=swap');
-
-        .lock-bg {
-          min-height: 100vh;
-          background: #0A0503;
-          background-image:
-            radial-gradient(ellipse 80% 60% at 50% 20%, rgba(255, 107, 26, 0.22), transparent 60%),
-            radial-gradient(ellipse 60% 40% at 50% 30%, rgba(255, 182, 39, 0.15), transparent 60%),
-            radial-gradient(ellipse 100% 50% at 50% 100%, rgba(199, 62, 29, 0.18), transparent 70%);
-          color: #FBF0E0;
-          font-family: 'Outfit', sans-serif;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-          position: relative;
-          overflow: hidden;
-        }
-
-        /* Sun/flame disc behind the title */
-        .lock-sun {
-          position: absolute;
-          top: 18%;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 380px; height: 380px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(255, 182, 39, 0.35) 0%, rgba(255, 107, 26, 0.15) 40%, transparent 70%);
-          filter: blur(20px);
-          pointer-events: none;
-        }
-
-        /* Dune silhouettes at bottom */
-        .lock-dunes {
-          position: absolute;
-          bottom: 0; left: 0; right: 0;
-          height: 200px;
-          pointer-events: none;
-          z-index: 1;
-        }
-
-        /* Giraffes positioned along the dune line */
-        .lock-giraffe {
-          position: absolute;
-          bottom: 60px;
-          color: #1A0E08;
-          z-index: 2;
-          pointer-events: none;
-        }
-        .lock-giraffe.left { left: 8%; }
-        .lock-giraffe.right { right: 12%; bottom: 80px; transform: scaleX(-1); }
-
-        @media (max-width: 700px) {
-          .lock-giraffe.right { display: none; }
-          .lock-sun { width: 260px; height: 260px; }
-        }
-
-        .lock-card {
-          width: 100%;
-          max-width: 440px;
-          text-align: center;
-          position: relative;
-          z-index: 10;
-        }
-        .lock-mark {
-          font-family: 'Outfit', sans-serif;
-          font-size: 11px;
-          letter-spacing: 0.35em;
-          text-transform: uppercase;
-          color: #FFB627;
-          margin-bottom: 24px;
-          font-weight: 500;
-        }
-        .lock-mark .sep { color: #6B5749; margin: 0 8px; }
-        .lock-title {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: clamp(48px, 9vw, 76px);
-          font-weight: 500;
-          line-height: 0.95;
-          letter-spacing: -0.02em;
-          margin: 0 0 44px;
-        }
-        .lock-title em {
-          font-style: italic; font-weight: 400;
-          background: linear-gradient(135deg, #FFB627 0%, #FF6B1A 50%, #C73E1D 100%);
-          -webkit-background-clip: text; background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .lock-sub {
-          font-family: 'Cormorant Garamond', serif;
-          font-style: italic;
-          font-size: 19px;
-          color: #C8956C;
-          margin: -32px 0 12px;
-          letter-spacing: 0.01em;
-        }
-        .lock-where {
-          font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
-          color: #8A7060; margin: -8px 0 44px;
-        }
-        .lock-input {
-          width: 100%;
-          padding: 16px 20px;
-          background: rgba(15, 8, 5, 0.6);
-          border: 1px solid rgba(255, 132, 56, 0.3);
-          border-radius: 10px;
-          font-family: 'Outfit', sans-serif;
-          font-size: 15px;
-          color: #FBF0E0;
-          text-align: center;
-          letter-spacing: 0.05em;
-          transition: all 0.2s ease;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-        .lock-input::placeholder { color: rgba(200, 149, 108, 0.5); letter-spacing: 0.02em; }
-        .lock-input:focus {
-          outline: none;
-          border-color: #FF8438;
-          box-shadow: 0 0 0 3px rgba(255, 132, 56, 0.15);
-        }
-        .lock-input.error { border-color: #C73E1D; animation: shake 0.4s; }
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-6px); }
-          75% { transform: translateX(6px); }
-        }
-        .lock-btn {
-          width: 100%;
-          margin-top: 12px;
-          padding: 15px 22px;
-          background: linear-gradient(135deg, #FFB627 0%, #FF6B1A 50%, #C73E1D 100%);
-          color: #150905;
-          border: none;
-          border-radius: 10px;
-          font-family: 'Outfit', sans-serif;
-          font-size: 14px;
-          font-weight: 600;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          box-shadow: 0 8px 32px rgba(255, 107, 26, 0.3);
-        }
-        .lock-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 40px rgba(255, 107, 26, 0.45); }
-        .lock-error {
-          color: #FF8438; font-size: 13px; font-style: italic;
-          font-family: 'Cormorant Garamond', serif; margin-top: 18px; height: 16px;
-        }
-        .lock-foot {
-          margin-top: 40px;
-          font-size: 11px;
-          color: #6B5749;
-          font-style: italic;
-          font-family: 'Cormorant Garamond', serif;
-          letter-spacing: 0.04em;
-        }
-      `}</style>
-      <div className="lock-bg">
-        <div className="lock-sun" />
-
-        {/* Dune silhouettes */}
-        <svg className="lock-dunes" viewBox="0 0 1200 200" preserveAspectRatio="none">
-          <path d="M 0 200 L 0 130 Q 200 90 400 110 Q 600 130 800 100 Q 1000 75 1200 105 L 1200 200 Z" fill="#150905" opacity="0.95"/>
-          <path d="M 0 200 L 0 165 Q 250 140 500 155 Q 750 170 1000 145 Q 1100 135 1200 150 L 1200 200 Z" fill="#0A0503"/>
-        </svg>
-
-        {/* Giraffe silhouettes on the dunes */}
-        <div className="lock-giraffe left">
-          <Giraffe size={64} />
+    <div className="ev-lock">
+      <div className="ev-lock-box">
+        <div style={{ color: '#C8956C', marginBottom: 8 }}>
+          <Giraffe size={60} />
         </div>
-        <div className="lock-giraffe right">
-          <Giraffe size={48} opacity={0.85} />
-        </div>
-
-        <div className="lock-card">
-          <div className="lock-mark">{config.year}</div>
-          <h1 className="lock-title">
-            {config.eventName.split(' ').slice(0, -1).join(' ')}{' '}
-            <em>{config.eventName.split(' ').slice(-1)[0]}</em>
-          </h1>
-          {config.tagline && <div className="lock-sub">{config.tagline}</div>}
-          {(config.dates || config.location) && (
-            <div className="lock-where">{[config.dates, config.location].filter(Boolean).join(' · ')}</div>
-          )}
-          <input
-            className={`lock-input ${error ? 'error' : ''}`}
-            type="password"
-            value={pw}
-            onChange={e => { setPw(e.target.value); setError(false); }}
-            onKeyDown={e => { if (e.key === 'Enter') tryUnlock(); }}
-            placeholder="Access password"
-            autoFocus
-          />
-          <button className="lock-btn" onClick={tryUnlock}>Enter</button>
-          <div className="lock-error">{error ? 'That password isn\u2019t right.' : ''}</div>
-          <div className="lock-foot">Contact your organizer for the password</div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ============================================================
-// HOME
-// ============================================================
-
-function Home({ config, setPage, me }) {
-  return (
-    <div className="ev-hero">
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20, color: '#FF8438' }}>
-        <Giraffe size={56} opacity={0.9} />
-      </div>
-      <div style={{ marginBottom: 24 }}>
-        <span className="ev-pill orange">{config.year} Edition</span>
-      </div>
-      <h1 className="ev-display">
-        {config.eventName.split(' ').slice(0, -1).join(' ')}{' '}
-        <em className="ev-italic">{config.eventName.split(' ').slice(-1)[0]}</em>
-      </h1>
-      {config.tagline && <div className="tagline">{config.tagline}</div>}
-      {(config.dates || config.location) && (
-        <div className="meta">{[config.dates, config.location].filter(Boolean).join(' · ')}</div>
-      )}
-      {config.description && <p className="lead">{config.description}</p>}
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {!me?.applied ? (
-          <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
-            RSVP & Apply →
-          </button>
-        ) : (
-          <button className="ev-btn ev-btn-primary" onClick={() => setPage('shifts')}>
-            Sign Up for Shifts →
-          </button>
-        )}
-        <button className="ev-btn ev-btn-ghost" onClick={() => setPage('packing')}>
-          What to Pack
-        </button>
-      </div>
-
-      {me?.applied && (
-        <div style={{ marginTop: 48, color: '#C8956C', fontFamily: 'Cormorant Garamond, serif', fontStyle: 'italic', fontSize: 19 }}>
-          Welcome back, {me.name.split(' ')[0]}.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// APPLY
-// ============================================================
-
-function Apply({ config, me, updateMe, applications, updateApplications, setPage }) {
-  const [name, setName] = useState(me?.name || '');
-  const [email, setEmail] = useState(me?.email || '');
-  const [phone, setPhone] = useState(me?.phone || '');
-  const [emergency, setEmergency] = useState(me?.emergency || '');
-  const [notes, setNotes] = useState(me?.notes || '');
-  const [agreed, setAgreed] = useState(config.agreements.map(() => false));
-  const [submitted, setSubmitted] = useState(me?.applied || false);
-
-  const allAgreed = agreed.every(Boolean);
-  const filled = name.trim() && email.trim() && phone.trim() && emergency.trim();
-  const canSubmit = allAgreed && filled && config.applicationsOpen;
-
-  async function submit() {
-    const userId = me?.id || newId();
-    const userObj = { id: userId, name, email, phone, emergency, notes, applied: true, appliedAt: new Date().toISOString() };
-    await updateMe(userObj);
-    const newApps = applications.filter(a => a.id !== userId).concat([userObj]);
-    await updateApplications(newApps);
-    setSubmitted(true);
-  }
-
-  if (submitted) {
-    return (
-      <div>
-        <h2 className="ev-section-title">You're in.</h2>
-        <p className="ev-section-sub">RSVP received — see you at the gathering.</p>
-        <div className="ev-success">
-          We've got your application, {name.split(' ')[0]}. Next step: <strong>sign up for {config.shiftRequirement} shifts</strong>.
-        </div>
-        <button className="ev-btn ev-btn-primary" onClick={() => setPage('shifts')}>
-          Pick Your Shifts →
-        </button>
-        <button className="ev-btn ev-btn-ghost" style={{ marginLeft: 8 }} onClick={() => setSubmitted(false)}>
-          Edit info
-        </button>
-      </div>
-    );
-  }
-
-  if (!config.applicationsOpen) {
-    return (
-      <div>
-        <h2 className="ev-section-title">Applications closed</h2>
-        <p className="ev-section-sub">RSVPs aren't being accepted right now. Check back soon.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h2 className="ev-section-title">Apply & RSVP</h2>
-      <p className="ev-section-sub">A few quick details, three boxes to check, and you're set.</p>
-
-      <div className="ev-card">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label className="ev-label">Full name</label>
-            <input className="ev-input" value={name} onChange={e => setName(e.target.value)} placeholder="Jordan Rivera" />
-          </div>
-          <div>
-            <label className="ev-label">Email</label>
-            <input className="ev-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
-          </div>
-          <div>
-            <label className="ev-label">Phone</label>
-            <input className="ev-input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label className="ev-label">Emergency contact (name & phone)</label>
-            <input className="ev-input" value={emergency} onChange={e => setEmergency(e.target.value)} placeholder="Sam Rivera, (555) 987-6543" />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label className="ev-label">Anything we should know? (dietary, accessibility, etc.)</label>
-            <textarea className="ev-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
-          </div>
-        </div>
-      </div>
-
-      <div className="ev-card">
-        <div style={{ marginBottom: 12, fontFamily: 'Fraunces, serif', fontSize: 18, fontWeight: 500 }}>Before you submit, please confirm:</div>
-        {config.agreements.map((text, i) => (
-          <label key={i} className="ev-check">
-            <input type="checkbox" checked={agreed[i]} onChange={e => {
-              const next = [...agreed]; next[i] = e.target.checked; setAgreed(next);
-            }} />
-            <span>{text}</span>
-          </label>
-        ))}
-      </div>
-
-      <button className="ev-btn ev-btn-primary" disabled={!canSubmit} onClick={submit}>
-        Submit Application
-      </button>
-      {!filled && <span style={{ marginLeft: 12, color: '#8A8270', fontSize: 13 }}>Fill in all required fields</span>}
-      {filled && !allAgreed && <span style={{ marginLeft: 12, color: '#8A8270', fontSize: 13 }}>Confirm all agreements</span>}
-    </div>
-  );
-}
-
-// ============================================================
-// SHIFTS
-// ============================================================
-
-function Shifts({ shifts, updateShifts, me, requirement, setPage }) {
-  if (!me?.applied) {
-    return (
-      <div>
-        <h2 className="ev-section-title">Shift Sign-Up</h2>
-        <p className="ev-section-sub">You'll need to RSVP first before claiming shifts.</p>
-        <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>Go to RSVP →</button>
-      </div>
-    );
-  }
-
-  const myShifts = shifts.filter(s => s.signups.some(u => u.userId === me.id));
-  const myCount = myShifts.length;
-  const remaining = Math.max(0, requirement - myCount);
-
-  async function toggle(shiftId) {
-    const next = shifts.map(s => {
-      if (s.id !== shiftId) return s;
-      const has = s.signups.some(u => u.userId === me.id);
-      if (has) return { ...s, signups: s.signups.filter(u => u.userId !== me.id) };
-      if (s.signups.length >= s.capacity) return s; // full
-      if (myCount >= requirement) return s; // already at requirement
-      return { ...s, signups: [...s.signups, { userId: me.id, name: me.name }] };
-    });
-    await updateShifts(next);
-  }
-
-  // group by day
-  const days = [...new Set(shifts.map(s => s.day))];
-
-  return (
-    <div>
-      <h2 className="ev-section-title">Pick Your Shifts</h2>
-      <p className="ev-section-sub">
-        Each person signs up for <strong>{requirement} shifts</strong> across the weekend. You've claimed {myCount}.
-      </p>
-
-      <div className="ev-card ev-card-tight" style={{
-        background: remaining === 0 ? '#D9E4D6' : '#FFFCF4',
-        borderColor: remaining === 0 ? '#3D5A40' : '#E5DFD0'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ fontFamily: 'Fraunces, serif', fontSize: 18 }}>
-            {remaining === 0 ? <>✓ All set — you have your {requirement} shifts.</> :
-              <>Need <strong>{remaining}</strong> more shift{remaining === 1 ? '' : 's'}.</>}
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: requirement }).map((_, i) => (
-              <div key={i} style={{
-                width: 14, height: 14, borderRadius: '50%',
-                background: i < myCount ? '#3D5A40' : 'transparent',
-                border: '1px solid #3D5A40'
-              }} />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {days.map(day => (
-        <div key={day}>
-          <div className="ev-day-heading">{day}</div>
-          {shifts.filter(s => s.day === day).map(s => {
-            const mine = s.signups.some(u => u.userId === me.id);
-            const full = s.signups.length >= s.capacity;
-            const atLimit = myCount >= requirement && !mine;
-            return (
-              <div key={s.id} className={`ev-shift ${mine ? 'mine' : ''} ${full && !mine ? 'full' : ''}`}>
-                <div className="ev-shift-meta">
-                  <div className="ev-shift-name">{s.name}</div>
-                  <div className="ev-shift-when">{s.time}</div>
-                  <div className="ev-shift-cap">{s.signups.length} / {s.capacity} signed up</div>
-                </div>
-                <div className="ev-shift-actions">
-                  {mine ? (
-                    <>
-                      <span className="ev-pill green">You're on this</span>
-                      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => toggle(s.id)}>Remove</button>
-                    </>
-                  ) : full ? (
-                    <span className="ev-pill">Full</span>
-                  ) : atLimit ? (
-                    <span className="ev-pill">Limit reached</span>
-                  ) : (
-                    <button className="ev-btn ev-btn-accent ev-btn-small" onClick={() => toggle(s.id)}>Claim</button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ============================================================
-// RESOURCES
-// ============================================================
-
-function Resources({ resources }) {
-  return (
-    <div>
-      <h2 className="ev-section-title">Resources</h2>
-      <p className="ev-section-sub">Maps, schedules, and everything else you'll want before you arrive.</p>
-      {resources.length === 0 && <p style={{ color: '#8A8270' }}>No resources posted yet.</p>}
-      {resources.map(r => (
-        <div key={r.id} className="ev-resource">
-          <div
-            className="ev-resource-icon"
-            style={r.kind === 'image' && r.url && r.url !== '#' ? { backgroundImage: `url(${r.url})` } : {}}
-          >
-            {(!r.url || r.url === '#' || r.kind !== 'image') && (r.kind === 'pdf' ? 'PDF' : r.kind === 'image' ? 'IMG' : 'FILE')}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Fraunces, serif', fontSize: 18, fontWeight: 500 }}>{r.name}</div>
-            <div style={{ fontSize: 14, color: '#6E6755' }}>{r.description}</div>
-          </div>
-          {r.url && r.url !== '#' ? (
-            <a href={r.url} target="_blank" rel="noopener noreferrer" className="ev-btn ev-btn-ghost ev-btn-small">
-              {r.kind === 'image' ? 'View' : 'Download'}
-            </a>
-          ) : (
-            <span className="ev-pill">Coming soon</span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ============================================================
-// PACKING
-// ============================================================
-
-function Packing({ items, checks, updateChecks }) {
-  const checkedCount = items.filter((_, i) => checks[i]).length;
-
-  async function toggle(i) {
-    const next = { ...checks, [i]: !checks[i] };
-    await updateChecks(next);
-  }
-
-  return (
-    <div>
-      <h2 className="ev-section-title">What to Pack</h2>
-      <p className="ev-section-sub">Check things off as you go. We'll remember your list on this device.</p>
-      <div className="ev-card ev-card-tight" style={{ marginBottom: 16, fontFamily: 'Fraunces, serif', fontSize: 18 }}>
-        {checkedCount} of {items.length} packed
-        <div style={{ height: 6, background: '#EFE9DA', borderRadius: 999, marginTop: 8, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%',
-            width: `${(checkedCount / items.length) * 100}%`,
-            background: '#3D5A40',
-            transition: 'width 0.3s ease'
-          }} />
-        </div>
-      </div>
-      <div className="ev-card">
-        {items.map((it, i) => (
-          <label key={i} className="ev-pack-row" style={{ cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!checks[i]} onChange={() => toggle(i)} />
-            <span className={checks[i] ? 'checked' : ''}>{it}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// ADMIN
-// ============================================================
-
-function Admin({ isAdmin, setIsAdmin, config, updateConfig, shifts, updateShifts,
-                  packingItems, updatePacking, resources, updateResources,
-                  applications, updateApplications }) {
-  const [pw, setPw] = useState('');
-  const [section, setSection] = useState('event');
-
-  if (!isAdmin) {
-    return (
-      <div>
-        <h2 className="ev-section-title">Admin</h2>
-        <p className="ev-section-sub">Restricted area. Enter the admin password to continue.</p>
-        <div className="ev-card" style={{ maxWidth: 400 }}>
-          <label className="ev-label">Password</label>
+        <h1>{config.eventName}</h1>
+        <p>Contact your organizer for the password</p>
+        <div className="ev-field">
           <input
             className="ev-input"
             type="password"
+            placeholder="Password"
             value={pw}
             onChange={e => setPw(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && pw === config.adminPassword) setIsAdmin(true); }}
+            onKeyDown={e => e.key === 'Enter' && attempt()}
+            style={{ textAlign: 'center', borderColor: err ? '#8B3020' : undefined }}
+            autoFocus
           />
-          <button className="ev-btn ev-btn-primary" style={{ marginTop: 12 }} onClick={() => {
-            if (pw === config.adminPassword) setIsAdmin(true);
-            else alert('Incorrect password');
-          }}>Unlock</button>
-          <div style={{ marginTop: 16, fontSize: 13, color: '#8A7060', fontStyle: 'italic', fontFamily: 'Cormorant Garamond, serif' }}>
-            Default password: <code style={{ color: '#FFB627' }}>admin123</code> — change it in Event Settings after you log in.
-          </div>
+          {err && <p style={{ color: '#8B3020', fontSize: 13, marginTop: 6, textAlign: 'center' }}>Incorrect password</p>}
         </div>
+        <button className="ev-btn ev-btn-primary" style={{ width: '100%' }} onClick={attempt}>
+          Enter
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SUCCESS MODAL
+// ============================================================
+
+function SuccessModal({ message, subMessage, onClose }) {
+  return (
+    <div className="ev-modal-backdrop" onClick={onClose}>
+      <div className="ev-modal" onClick={e => e.stopPropagation()}>
+        <div style={{ color: '#C8956C', marginBottom: 16 }}>
+          <Giraffe size={48} />
+        </div>
+        <h2>{message}</h2>
+        <p>{subMessage}</p>
+        <button className="ev-btn ev-btn-primary" onClick={onClose} style={{ width: '100%' }}>
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HOME PAGE
+// ============================================================
+
+function HomePage({ config, setPage }) {
+  return (
+    <div className="ev-hero">
+      <div style={{ color: '#C8956C' }}>
+        <Giraffe size={64} />
+      </div>
+      {config.year && (
+        <div className="ev-hero-badge">{config.year} Edition</div>
+      )}
+      <h1>
+        {config.eventName.split(' ').map((w, i) => (
+          i === config.eventName.split(' ').length - 1
+            ? <em key={i}>{w}</em>
+            : <span key={i}>{w} </span>
+        ))}
+      </h1>
+      {(config.dates || config.location) && (
+        <div className="ev-hero-meta">
+          {config.dates && <span>📅 {config.dates}</span>}
+          {config.location && <span>📍 {config.location}</span>}
+        </div>
+      )}
+      {config.description && (
+        <p className="ev-hero-desc">{config.description}</p>
+      )}
+      <div className="ev-hero-actions">
+        <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
+          Apply →
+        </button>
+        <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')} style={{ background: 'linear-gradient(135deg, #8B6040, #6B4020)' }}>
+          Returning Alumna/Alumnus →
+        </button>
+        <button className="ev-btn ev-btn-dark" onClick={() => setPage('packing')}>
+          What to Pack
+        </button>
+      </div>
+      {config.tagline && <p className="ev-hero-tagline">"{config.tagline}"</p>}
+      {!config.tagline && (
+        <p className="ev-hero-tagline">Built for the wanderers who keep returning to the dust.</p>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SHARED FORM COMPONENT (used by both Apply & RSVP)
+// ============================================================
+
+function ApplicationForm({
+  config, shifts, setShifts, applications, setApplications, me, setMe,
+  formType, // 'apply' | 'rsvp'
+  onSuccess,
+}) {
+  const isRsvp = formType === 'rsvp';
+
+  const [form, setForm] = useState({
+    name: me?.name || '',
+    playaName: me?.playaName || '',
+    email: me?.email || '',
+    phone: me?.phone || '',
+    emergency: '',
+  });
+  const [agreed, setAgreed] = useState(config.agreements.map(() => false));
+  const [selectedShifts, setSelectedShifts] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const field = (key) => ({
+    value: form[key],
+    onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
+  });
+
+  const toggleShift = (shiftId) => {
+    setSelectedShifts(prev =>
+      prev.includes(shiftId) ? prev.filter(id => id !== shiftId) : [...prev, shiftId]
+    );
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!form.name.trim()) errs.name = 'Required';
+    if (!form.email.trim()) errs.email = 'Required';
+    if (!form.phone.trim()) errs.phone = 'Required';
+    if (!form.emergency.trim()) errs.emergency = 'Required';
+    if (!agreed.every(Boolean)) errs.agreements = 'Please agree to all statements';
+    return errs;
+  };
+
+  const submit = async () => {
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setSubmitting(true);
+
+    const myId = me?.id || newId();
+    const newMe = { id: myId, name: form.name, playaName: form.playaName, email: form.email, phone: form.phone };
+    await save('me', newMe, false);
+    setMe(newMe);
+
+    // Sign up for shifts
+    let updatedShifts = shifts;
+    if (selectedShifts.length > 0) {
+      updatedShifts = shifts.map(sh => {
+        if (!selectedShifts.includes(sh.id)) return sh;
+        if (sh.signups.some(s => s.id === myId)) return sh;
+        if (sh.signups.length >= sh.capacity) return sh;
+        return { ...sh, signups: [...sh.signups, { id: myId, name: form.name }] };
+      });
+      await save('shifts', updatedShifts, true);
+      setShifts(updatedShifts);
+    }
+
+    const application = {
+      id: newId(),
+      userId: myId,
+      type: formType,
+      name: form.name,
+      playaName: form.playaName,
+      email: form.email,
+      phone: form.phone,
+      emergency: form.emergency,
+      shifts: selectedShifts,
+      appliedAt: new Date().toISOString(),
+    };
+
+    const newApplications = [...applications, application];
+    await save('applications', newApplications, true);
+    setApplications(newApplications);
+
+    setSubmitting(false);
+    onSuccess();
+  };
+
+  const dayGroups = shifts.reduce((acc, sh) => {
+    if (!acc[sh.day]) acc[sh.day] = [];
+    acc[sh.day].push(sh);
+    return acc;
+  }, {});
+
+  if (!config.applicationsOpen && !isRsvp) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 0', color: '#6B5749' }}>
+        <Giraffe size={48} style={{ marginBottom: 16 }} />
+        <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, color: '#FBF0E0', marginBottom: 8 }}>Applications closed</p>
+        <p style={{ fontSize: 14 }}>Check back soon or contact camp leadership.</p>
       </div>
     );
   }
 
-  const sections = [
-    ['event', 'Event'],
-    ['shifts', 'Shifts'],
-    ['apps', 'Applications'],
-    ['resources', 'Resources'],
-    ['packing', 'Packing List'],
-  ];
-
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <h2 className="ev-section-title">Admin</h2>
-        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setIsAdmin(false)}>Lock</button>
-      </div>
-      <div className="ev-nav" style={{ marginBottom: 24 }}>
-        {sections.map(([k, l]) => (
-          <button key={k} onClick={() => setSection(k)} className={section === k ? 'active' : ''}>{l}</button>
-        ))}
+      <div className="ev-field">
+        <label className="ev-label">Full Name *</label>
+        <input className="ev-input" placeholder="Your legal name" {...field('name')} />
+        {errors.name && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.name}</p>}
       </div>
 
-      {section === 'event' && <AdminEvent config={config} updateConfig={updateConfig} />}
-      {section === 'shifts' && <AdminShifts shifts={shifts} updateShifts={updateShifts} />}
-      {section === 'apps' && <AdminApps applications={applications} updateApplications={updateApplications} />}
-      {section === 'resources' && <AdminResources resources={resources} updateResources={updateResources} />}
-      {section === 'packing' && <AdminPacking items={packingItems} updatePacking={updatePacking} />}
-    </div>
-  );
-}
-
-function AdminEvent({ config, updateConfig }) {
-  const [c, setC] = useState(config);
-  useEffect(() => setC(config), [config]);
-  const set = (k, v) => setC({ ...c, [k]: v });
-  const setAgreement = (i, v) => { const a = [...c.agreements]; a[i] = v; setC({ ...c, agreements: a }); };
-  return (
-    <div className="ev-admin-section">
-      <h3>Event Settings</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div><label className="ev-label">Event Name</label><input className="ev-input" value={c.eventName} onChange={e => set('eventName', e.target.value)} /></div>
-        <div><label className="ev-label">Tagline</label><input className="ev-input" value={c.tagline} onChange={e => set('tagline', e.target.value)} /></div>
-        <div><label className="ev-label">Year</label><input className="ev-input" type="number" value={c.year} onChange={e => set('year', +e.target.value)} /></div>
-        <div><label className="ev-label">Dates</label><input className="ev-input" value={c.dates} onChange={e => set('dates', e.target.value)} /></div>
-        <div style={{ gridColumn: 'span 2' }}><label className="ev-label">Location</label><input className="ev-input" value={c.location} onChange={e => set('location', e.target.value)} /></div>
-        <div style={{ gridColumn: 'span 2' }}><label className="ev-label">Description</label><textarea className="ev-textarea" value={c.description} onChange={e => set('description', e.target.value)} /></div>
-        <div><label className="ev-label">Shifts Required Per Person</label><input className="ev-input" type="number" min="1" value={c.shiftRequirement} onChange={e => set('shiftRequirement', +e.target.value)} /></div>
-        <div><label className="ev-label">Admin Password</label><input className="ev-input" value={c.adminPassword} onChange={e => set('adminPassword', e.target.value)} /></div>
-        <div style={{ gridColumn: 'span 2' }}><label className="ev-label">Event Access Password (gate to enter app)</label><input className="ev-input" value={c.eventPassword} onChange={e => set('eventPassword', e.target.value)} /></div>
-        <div style={{ gridColumn: 'span 2' }}>
-          <label className="ev-check">
-            <input type="checkbox" checked={c.applicationsOpen} onChange={e => set('applicationsOpen', e.target.checked)} />
-            <span>Applications open (uncheck to close RSVP)</span>
-          </label>
-        </div>
+      <div className="ev-field">
+        <label className="ev-label">Playa Name</label>
+        <input className="ev-input" placeholder="Your playa name (if you have one)" {...field('playaName')} />
       </div>
-      <div style={{ marginTop: 16 }}>
-        <label className="ev-label">Required Agreements (checkboxes shown on application)</label>
-        {c.agreements.map((a, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-            <input className="ev-input" value={a} onChange={e => setAgreement(i, e.target.value)} />
-            <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setC({ ...c, agreements: c.agreements.filter((_, j) => j !== i) })}>×</button>
+
+      <div className="ev-field">
+        <label className="ev-label">Email *</label>
+        <input className="ev-input" type="email" placeholder="you@example.com" {...field('email')} />
+        {errors.email && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
+      </div>
+
+      <div className="ev-field">
+        <label className="ev-label">Phone *</label>
+        <input className="ev-input" type="tel" placeholder="(555) 000-0000" {...field('phone')} />
+        {errors.phone && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.phone}</p>}
+      </div>
+
+      <div className="ev-field">
+        <label className="ev-label">Emergency Contact *</label>
+        <input className="ev-input" placeholder="Name & phone number" {...field('emergency')} />
+        {errors.emergency && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.emergency}</p>}
+      </div>
+
+      {/* Shift selection */}
+      <div style={{ marginBottom: 28 }}>
+        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>
+          Shifts — pick at least {config.shiftRequirement}
+        </label>
+        <p style={{ fontSize: 13, color: '#6B5749', marginBottom: 16 }}>
+          Everyone contributes. Choose the shifts that work for your schedule.
+        </p>
+        {Object.entries(dayGroups).map(([day, dayShifts]) => (
+          <div key={day} style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C8956C', marginBottom: 8 }}>{day}</p>
+            {dayShifts.map(sh => {
+              const full = sh.signups.length >= sh.capacity;
+              const picked = selectedShifts.includes(sh.id);
+              return (
+                <label key={sh.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                  background: picked ? '#1A0E08' : '#0F0805',
+                  border: `1px solid ${picked ? '#C8956C' : '#1E100A'}`,
+                  borderRadius: 8, marginBottom: 6, cursor: full ? 'not-allowed' : 'pointer',
+                  opacity: full && !picked ? .5 : 1,
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={picked}
+                    disabled={full && !picked}
+                    onChange={() => toggleShift(sh.id)}
+                    style={{ accentColor: '#C8956C' }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500 }}>{sh.name}</div>
+                    <div style={{ fontSize: 12, color: '#6B5749' }}>{sh.time}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: full ? '#8B3020' : '#6B5749', whiteSpace: 'nowrap' }}>
+                    {sh.signups.length}/{sh.capacity} {full ? '· Full' : ''}
+                  </div>
+                </label>
+              );
+            })}
           </div>
         ))}
-        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setC({ ...c, agreements: [...c.agreements, 'New agreement…'] })}>+ Add agreement</button>
       </div>
-      <div style={{ marginTop: 20 }}>
-        <button className="ev-btn ev-btn-primary" onClick={() => updateConfig(c)}>Save changes</button>
+
+      {/* Agreements */}
+      <div style={{ marginBottom: 28 }}>
+        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>Agreements</label>
+        {config.agreements.map((ag, i) => (
+          <div key={i} className="ev-agreement">
+            <input
+              type="checkbox"
+              id={`ag-${i}`}
+              checked={agreed[i]}
+              onChange={() => setAgreed(a => a.map((v, j) => j === i ? !v : v))}
+            />
+            <label htmlFor={`ag-${i}`} style={{ fontSize: 13, color: '#A88876', lineHeight: 1.5, cursor: 'pointer' }}>
+              {ag}
+            </label>
+          </div>
+        ))}
+        {errors.agreements && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.agreements}</p>}
       </div>
+
+      <button
+        className="ev-btn ev-btn-primary"
+        style={{ width: '100%', padding: '14px' }}
+        onClick={submit}
+        disabled={submitting}
+      >
+        {submitting ? 'Submitting…' : isRsvp ? 'Confirm RSVP' : 'Submit Application'}
+      </button>
     </div>
   );
 }
+
+// ============================================================
+// APPLY PAGE — first-timers
+// ============================================================
+
+function ApplyPage({ config, shifts, setShifts, applications, setApplications, me, setMe }) {
+  const [success, setSuccess] = useState(false);
+
+  return (
+    <div className="ev-page">
+      {success && (
+        <SuccessModal
+          message="Thanks for your submission!"
+          subMessage="Someone from camp leadership will be in touch in the coming weeks."
+          onClose={() => setSuccess(false)}
+        />
+      )}
+      <div className="ev-form-header">
+        <h1>Apply</h1>
+        <p>First time at Beverly Grillz? We'd love to have you. Fill out the form below and we'll be in touch.</p>
+      </div>
+      <ApplicationForm
+        config={config}
+        shifts={shifts}
+        setShifts={setShifts}
+        applications={applications}
+        setApplications={setApplications}
+        me={me}
+        setMe={setMe}
+        formType="apply"
+        onSuccess={() => setSuccess(true)}
+      />
+    </div>
+  );
+}
+
+// ============================================================
+// RSVP PAGE — returning alumni
+// ============================================================
+
+function RSVPPage({ config, shifts, setShifts, applications, setApplications, me, setMe }) {
+  const [success, setSuccess] = useState(false);
+
+  return (
+    <div className="ev-page">
+      {success && (
+        <SuccessModal
+          message="Welcome back!"
+          subMessage="Your response has been recorded."
+          onClose={() => setSuccess(false)}
+        />
+      )}
+      <div className="ev-form-header">
+        <h1>RSVP</h1>
+        <p>Welcome back to the dust. Confirm your spot for this year's Beverly Grillz.</p>
+      </div>
+      <ApplicationForm
+        config={config}
+        shifts={shifts}
+        setShifts={setShifts}
+        applications={applications}
+        setApplications={setApplications}
+        me={me}
+        setMe={setMe}
+        formType="rsvp"
+        onSuccess={() => setSuccess(true)}
+      />
+    </div>
+  );
+}
+
+// ============================================================
+// SHIFTS PAGE
+// ============================================================
+
+function ShiftsPage({ shifts, me }) {
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Shifts</h1>
+      <p className="ev-section-sub">Everyone pitches in. Thank you for being part of the crew.</p>
+
+      <div className="ev-shifts-notice">
+        <h2>Shift Sign-Ups Coming Soon</h2>
+        <p>The shift calendar will be released on August 1st.</p>
+      </div>
+
+      {shifts.length > 0 && (() => {
+        const dayGroups = shifts.reduce((acc, sh) => {
+          if (!acc[sh.day]) acc[sh.day] = [];
+          acc[sh.day].push(sh);
+          return acc;
+        }, {});
+        const myId = me?.id;
+        return Object.entries(dayGroups).map(([day, dayShifts]) => (
+          <div key={day} style={{ marginBottom: 28 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C8956C', marginBottom: 10 }}>{day}</p>
+            {dayShifts.map(sh => {
+              const isMine = myId && sh.signups.some(s => s.id === myId);
+              const full = sh.signups.length >= sh.capacity;
+              return (
+                <div key={sh.id} className="ev-shift-card">
+                  <div className="ev-shift-info">
+                    <h3>{sh.name} {isMine && <span style={{ color: '#C8956C', fontSize: 12 }}>✓ You</span>}</h3>
+                    <p>{sh.time}</p>
+                  </div>
+                  <div className="ev-shift-meta">
+                    <span style={{ color: full ? '#8B3020' : '#6B5749' }}>
+                      {sh.signups.length}/{sh.capacity}{full ? ' · Full' : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ));
+      })()}
+    </div>
+  );
+}
+
+// ============================================================
+// RESOURCES PAGE
+// ============================================================
+
+function ResourcesPage({ resources }) {
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Resources</h1>
+      <p className="ev-section-sub">Everything you need for the event.</p>
+      {resources.length === 0 && (
+        <p style={{ color: '#6B5749', fontSize: 14 }}>Resources will be posted here before the event.</p>
+      )}
+      {resources.map(r => (
+        <a
+          key={r.id}
+          className="ev-resource-card"
+          href={r.url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'flex', textDecoration: 'none' }}
+        >
+          <div className="ev-resource-info">
+            <h3>{r.name}</h3>
+            {r.description && <p>{r.description}</p>}
+          </div>
+          <div className="ev-resource-kind">{r.kind}</div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// PACKING PAGE
+// ============================================================
+
+function PackingPage({ items, checks, setChecks, me }) {
+  const toggle = async (item) => {
+    const next = { ...checks, [item]: !checks[item] };
+    setChecks(next);
+    await save('packingChecks', next, false);
+  };
+
+  const done = Object.values(checks).filter(Boolean).length;
+
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Packing List</h1>
+      <p className="ev-section-sub">
+        {done === 0
+          ? 'Check items off as you pack.'
+          : `${done} of ${items.length} packed.`}
+      </p>
+      {items.map((item, i) => {
+        const checked = !!checks[item];
+        return (
+          <div
+            key={i}
+            className={`ev-packing-item${checked ? ' checked' : ''}`}
+            onClick={() => toggle(item)}
+          >
+            <input type="checkbox" checked={checked} onChange={() => toggle(item)} onClick={e => e.stopPropagation()} />
+            <span>{item}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// DATES PAGE
+// ============================================================
+
+function DatesPage({ calendar }) {
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Dates</h1>
+      <p className="ev-section-sub">Key dates for the 2026 season.</p>
+      <div className="ev-dates-year">2026 Calendar</div>
+      {calendar.map(ev => (
+        <div key={ev.id} className="ev-date-row">
+          <div className="ev-date-date">{ev.date}</div>
+          <div className="ev-date-label">{ev.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN — Config panel
+// ============================================================
+
+function AdminConfig({ config, updateConfig }) {
+  const [form, setForm] = useState(config);
+  useEffect(() => setForm(config), [config]);
+  const f = (key) => ({ value: form[key] || '', onChange: e => setForm(c => ({ ...c, [key]: e.target.value })) });
+
+  return (
+    <div className="ev-admin-section">
+      <h3>Event Info</h3>
+      <div className="ev-field"><label className="ev-label">Event Name</label><input className="ev-input" {...f('eventName')} /></div>
+      <div className="ev-field"><label className="ev-label">Tagline</label><input className="ev-input" {...f('tagline')} /></div>
+      <div className="ev-field"><label className="ev-label">Year</label><input className="ev-input" type="number" {...f('year')} /></div>
+      <div className="ev-field"><label className="ev-label">Dates</label><input className="ev-input" placeholder="e.g. July 3–6, 2026" {...f('dates')} /></div>
+      <div className="ev-field"><label className="ev-label">Location</label><input className="ev-input" placeholder="e.g. Mojave Desert, CA" {...f('location')} /></div>
+      <div className="ev-field"><label className="ev-label">Description</label><textarea className="ev-textarea" rows={4} {...f('description')} /></div>
+
+      <h3 style={{ marginTop: 32 }}>Access</h3>
+      <div className="ev-field"><label className="ev-label">Event Password (lock screen)</label><input className="ev-input" {...f('eventPassword')} /></div>
+      <div className="ev-field"><label className="ev-label">Admin Password</label><input className="ev-input" {...f('adminPassword')} /></div>
+
+      <h3 style={{ marginTop: 32 }}>Applications</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <input
+          type="checkbox"
+          id="appOpen"
+          checked={!!form.applicationsOpen}
+          onChange={e => setForm(c => ({ ...c, applicationsOpen: e.target.checked }))}
+          style={{ accentColor: '#C8956C' }}
+        />
+        <label htmlFor="appOpen" style={{ fontSize: 13, color: '#A88876', cursor: 'pointer' }}>
+          Applications open (uncheck to close RSVP)
+        </label>
+      </div>
+      <div className="ev-field">
+        <label className="ev-label">Minimum shifts required</label>
+        <input className="ev-input" type="number" {...f('shiftRequirement')} />
+      </div>
+
+      <button className="ev-btn ev-btn-primary" onClick={() => updateConfig(form)}>Save changes</button>
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN — Shifts panel
+// ============================================================
 
 function AdminShifts({ shifts, updateShifts }) {
   const [list, setList] = useState(shifts);
@@ -1119,78 +980,77 @@ function AdminShifts({ shifts, updateShifts }) {
 
   const update = (i, k, v) => { const next = [...list]; next[i] = { ...next[i], [k]: v }; setList(next); };
   const remove = (i) => setList(list.filter((_, j) => j !== i));
-  const add = () => setList([...list, { id: 's' + Date.now(), name: 'New Shift', day: 'Friday', time: '12:00–2:00 pm', capacity: 4, signups: [] }]);
+  const add = () => setList([...list, { id: 'S' + Date.now(), name: 'New Shift', day: 'Thursday', time: '12:00–2:00 pm', capacity: 4, signups: [] }]);
 
   return (
     <div className="ev-admin-section">
-      <h3>Shift Layout</h3>
-      <p style={{ marginTop: -10, color: '#6E6755', fontSize: 14 }}>Define the shifts participants can sign up for. Capacity caps the number of sign-ups.</p>
-
-      <div className="ev-admin-row" style={{ fontWeight: 600, fontSize: 12, color: '#4F5A52', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        <div>Name</div><div>Day</div><div>Time</div><div>Cap</div><div></div>
-      </div>
-      {list.map((s, i) => (
-        <div key={s.id} className="ev-admin-row">
-          <input className="ev-input" value={s.name} onChange={e => update(i, 'name', e.target.value)} />
-          <input className="ev-input" value={s.day} onChange={e => update(i, 'day', e.target.value)} />
-          <input className="ev-input" value={s.time} onChange={e => update(i, 'time', e.target.value)} />
-          <input className="ev-input" type="number" min="1" value={s.capacity} onChange={e => update(i, 'capacity', +e.target.value)} />
-          <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => remove(i)}>×</button>
+      <h3>Shifts</h3>
+      {list.map((sh, i) => (
+        <div key={sh.id} style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 8, padding: 14, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 60px', gap: 8, marginBottom: 8 }}>
+            <input className="ev-input" placeholder="Shift name" value={sh.name} onChange={e => update(i, 'name', e.target.value)} />
+            <input className="ev-input" placeholder="Day" value={sh.day} onChange={e => update(i, 'day', e.target.value)} />
+            <input className="ev-input" placeholder="Time" value={sh.time} onChange={e => update(i, 'time', e.target.value)} />
+            <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => remove(i)}>×</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label className="ev-label" style={{ marginBottom: 0 }}>Capacity:</label>
+            <input className="ev-input" type="number" value={sh.capacity} onChange={e => update(i, 'capacity', Number(e.target.value))} style={{ width: 80 }} />
+            <span style={{ fontSize: 12, color: '#6B5749' }}>{sh.signups.length} signed up</span>
+          </div>
         </div>
       ))}
-      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={add} style={{ marginTop: 8 }}>+ Add shift</button>
-
+      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={add}>+ Add shift</button>
       <div style={{ marginTop: 20 }}>
         <button className="ev-btn ev-btn-primary" onClick={() => updateShifts(list)}>Save shifts</button>
       </div>
-
-      <div className="ev-divider" />
-      <h3 style={{ fontSize: 18 }}>Current sign-ups</h3>
-      {shifts.map(s => (
-        <div key={s.id} style={{ marginBottom: 10 }}>
-          <strong>{s.name}</strong> <span style={{ color: '#8A8270' }}>({s.day}, {s.time}) — {s.signups.length}/{s.capacity}</span>
-          {s.signups.length > 0 && (
-            <div style={{ fontSize: 14, marginLeft: 12, color: '#4F5A52' }}>
-              {s.signups.map(u => u.name).join(', ')}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   );
 }
 
-function AdminApps({ applications, updateApplications }) {
-  function exportCsv() {
-    const rows = [['Name', 'Email', 'Phone', 'Emergency Contact', 'Notes', 'Applied At']];
-    applications.forEach(a => rows.push([a.name, a.email, a.phone, a.emergency, (a.notes || '').replace(/\n/g, ' '), a.appliedAt]));
-    const csv = rows.map(r => r.map(c => `"${(c || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+// ============================================================
+// ADMIN — Applications panel
+// ============================================================
+
+function AdminApplications({ applications }) {
+  const exportCsv = () => {
+    const rows = [
+      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Emergency', 'Submitted'],
+      ...applications.map(a => [a.type || '', a.name, a.playaName || '', a.email, a.phone, a.emergency, new Date(a.appliedAt).toLocaleString()]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'applications.csv';
-    a.click();
-  }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'applications.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="ev-admin-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h3>Applications ({applications.length})</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 0, borderBottom: 'none' }}>Applications ({applications.length})</h3>
         <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={exportCsv} disabled={applications.length === 0}>Export CSV</button>
       </div>
       {applications.length === 0 && <p style={{ color: '#8A7060' }}>No applications yet.</p>}
       {applications.map(a => (
         <div key={a.id} style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 8, padding: 14, marginBottom: 10 }}>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontWeight: 500, fontSize: 19, color: '#FBF0E0' }}>{a.name}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+            <div style={{ fontFamily: 'Cormorant Garamond, serif', fontWeight: 500, fontSize: 19, color: '#FBF0E0' }}>{a.name}</div>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: a.type === 'rsvp' ? '#1A2A10' : '#1A100A', color: a.type === 'rsvp' ? '#6EC87A' : '#C8956C', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{a.type || 'apply'}</span>
+          </div>
+          {a.playaName && <div style={{ fontSize: 13, color: '#C8956C', marginBottom: 2 }}>"{a.playaName}"</div>}
           <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email} · {a.phone}</div>
           <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>Emergency: {a.emergency}</div>
-          {a.notes && <div style={{ fontSize: 13, color: '#A88876', marginTop: 4, fontStyle: 'italic' }}>"{a.notes}"</div>}
           <div style={{ fontSize: 12, color: '#6B5749', marginTop: 6 }}>Submitted {new Date(a.appliedAt).toLocaleString()}</div>
         </div>
       ))}
     </div>
   );
 }
+
+// ============================================================
+// ADMIN — Resources panel
+// ============================================================
 
 function AdminResources({ resources, updateResources }) {
   const [list, setList] = useState(resources);
@@ -1226,6 +1086,10 @@ function AdminResources({ resources, updateResources }) {
   );
 }
 
+// ============================================================
+// ADMIN — Packing panel
+// ============================================================
+
 function AdminPacking({ items, updatePacking }) {
   const [list, setList] = useState(items);
   useEffect(() => setList(items), [items]);
@@ -1247,5 +1111,284 @@ function AdminPacking({ items, updatePacking }) {
         <button className="ev-btn ev-btn-primary" onClick={() => updatePacking(list)}>Save list</button>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// ADMIN — Calendar panel
+// ============================================================
+
+function AdminCalendar({ calendar, updateCalendar }) {
+  const [list, setList] = useState(calendar);
+  useEffect(() => setList(calendar), [calendar]);
+  const update = (i, k, v) => { const next = [...list]; next[i] = { ...next[i], [k]: v }; setList(next); };
+  const remove = (i) => setList(list.filter((_, j) => j !== i));
+  const add = () => setList([...list, { id: 'c' + Date.now(), date: '', label: '' }]);
+
+  return (
+    <div className="ev-admin-section">
+      <h3>Calendar</h3>
+      {list.map((ev, i) => (
+        <div key={ev.id} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 40px', gap: 8, marginBottom: 8 }}>
+          <input className="ev-input" placeholder="Date (e.g. 8/1/26)" value={ev.date} onChange={e => update(i, 'date', e.target.value)} />
+          <input className="ev-input" placeholder="Event description" value={ev.label} onChange={e => update(i, 'label', e.target.value)} />
+          <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => remove(i)}>×</button>
+        </div>
+      ))}
+      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={add}>+ Add date</button>
+      <div style={{ marginTop: 20 }}>
+        <button className="ev-btn ev-btn-primary" onClick={() => updateCalendar(list)}>Save calendar</button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN PAGE
+// ============================================================
+
+function AdminPage({ config, shifts, resources, packingItems, applications, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
+  const [tab, setTab] = useState('config');
+
+  const tabs = [
+    { id: 'config', label: 'Event Info' },
+    { id: 'shifts', label: 'Shifts' },
+    { id: 'packing', label: 'Packing' },
+    { id: 'resources', label: 'Resources' },
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'applications', label: `Applications (${applications.length})` },
+  ];
+
+  return (
+    <div className="ev-page-wide">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+        <h1 className="ev-section-h" style={{ marginBottom: 0 }}>Admin</h1>
+        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={onLogout}>Log out</button>
+      </div>
+      <div className="ev-admin-tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`ev-admin-tab${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'config' && <AdminConfig config={config} updateConfig={updateConfig} />}
+      {tab === 'shifts' && <AdminShifts shifts={shifts} updateShifts={updateShifts} />}
+      {tab === 'packing' && <AdminPacking items={packingItems} updatePacking={updatePacking} />}
+      {tab === 'resources' && <AdminResources resources={resources} updateResources={updateResources} />}
+      {tab === 'calendar' && <AdminCalendar calendar={calendar} updateCalendar={updateCalendar} />}
+      {tab === 'applications' && <AdminApplications applications={applications} />}
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN LOCK
+// ============================================================
+
+function AdminLock({ config, onLogin }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState(false);
+
+  const attempt = () => {
+    if (pw === config.adminPassword) {
+      onLogin();
+    } else {
+      setErr(true);
+      setPw('');
+      setTimeout(() => setErr(false), 1500);
+    }
+  };
+
+  return (
+    <div className="ev-page" style={{ maxWidth: 360, paddingTop: 80 }}>
+      <h1 className="ev-section-h">Admin</h1>
+      <p className="ev-section-sub">Enter the admin password to continue.</p>
+      <div className="ev-field">
+        <input
+          className="ev-input"
+          type="password"
+          placeholder="Admin password"
+          value={pw}
+          onChange={e => setPw(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && attempt()}
+          style={{ borderColor: err ? '#8B3020' : undefined }}
+          autoFocus
+        />
+        {err && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>Incorrect password</p>}
+      </div>
+      <button className="ev-btn ev-btn-primary" style={{ width: '100%' }} onClick={attempt}>Enter</button>
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+
+export default function App() {
+  const [page, setPage] = useState('home');
+  const [loading, setLoading] = useState(true);
+
+  // Shared state (Supabase kv_store)
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [shifts, setShifts] = useState(DEFAULT_SHIFTS);
+  const [packingItems, setPackingItems] = useState(DEFAULT_PACKING);
+  const [resources, setResources] = useState(DEFAULT_RESOURCES);
+  const [applications, setApplications] = useState([]);
+  const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
+
+  // Per-device state (localStorage)
+  const [me, setMe] = useState(null);
+  const [packingChecks, setPackingChecks] = useState({});
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const [cfg, sh, pk, rs, ap, cal, mUsr, pcChk, unl] = await Promise.all([
+        load('config', DEFAULT_CONFIG, true),
+        load('shifts', DEFAULT_SHIFTS, true),
+        load('packing', DEFAULT_PACKING, true),
+        load('resources', DEFAULT_RESOURCES, true),
+        load('applications', [], true),
+        load('calendar', DEFAULT_CALENDAR, true),
+        load('me', null, false),
+        load('packingChecks', {}, false),
+        load('unlocked', false, false),
+      ]);
+      setConfig(cfg);
+      setShifts(sh);
+      setPackingItems(pk);
+      setResources(rs);
+      setApplications(ap);
+      setCalendar(cal);
+      setMe(mUsr);
+      setPackingChecks(pcChk);
+      setUnlocked(unl);
+      setLoading(false);
+    })();
+  }, []);
+
+  const unlock = async () => {
+    await save('unlocked', true, false);
+    setUnlocked(true);
+  };
+
+  const updateConfig = async (cfg) => {
+    setConfig(cfg);
+    await save('config', cfg, true);
+  };
+  const updateShifts = async (sh) => {
+    setShifts(sh);
+    await save('shifts', sh, true);
+  };
+  const updatePacking = async (pk) => {
+    setPackingItems(pk);
+    await save('packing', pk, true);
+  };
+  const updateResources = async (rs) => {
+    setResources(rs);
+    await save('resources', rs, true);
+  };
+  const updateCalendar = async (cal) => {
+    setCalendar(cal);
+    await save('calendar', cal, true);
+  };
+
+  const NAV_TABS = [
+    { id: 'home', label: 'Home' },
+    { id: 'apply', label: 'Apply' },
+    { id: 'rsvp', label: 'RSVP' },
+    { id: 'shifts', label: 'Shifts' },
+    { id: 'dates', label: 'Dates' },
+    { id: 'resources', label: 'Resources' },
+    { id: 'packing', label: 'Packing' },
+    { id: 'admin', label: 'Admin' },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C8956C', fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic' }}>
+        Lighting the fires…
+      </div>
+    );
+  }
+
+  if (!unlocked) {
+    return (
+      <>
+        <InjectCSS />
+        <LockScreen config={config} onUnlock={unlock} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <InjectCSS />
+      <nav className="ev-nav">
+        <span className="ev-nav-brand" onClick={() => setPage('home')}>{config.eventName}</span>
+        <div className="ev-nav-tabs">
+          {NAV_TABS.map(t => (
+            <button
+              key={t.id}
+              className={`ev-nav-tab${page === t.id ? ' active' : ''}`}
+              onClick={() => setPage(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+          <button
+            className="ev-nav-lock"
+            title="Lock screen"
+            onClick={async () => {
+              await save('unlocked', false, false);
+              setUnlocked(false);
+              setIsAdmin(false);
+            }}
+          >
+            🔒
+          </button>
+        </div>
+      </nav>
+
+      {page === 'home' && <HomePage config={config} setPage={setPage} />}
+      {page === 'apply' && (
+        <ApplyPage
+          config={config} shifts={shifts} setShifts={setShifts}
+          applications={applications} setApplications={setApplications}
+          me={me} setMe={setMe}
+        />
+      )}
+      {page === 'rsvp' && (
+        <RSVPPage
+          config={config} shifts={shifts} setShifts={setShifts}
+          applications={applications} setApplications={setApplications}
+          me={me} setMe={setMe}
+        />
+      )}
+      {page === 'shifts' && <ShiftsPage shifts={shifts} me={me} />}
+      {page === 'dates' && <DatesPage calendar={calendar} />}
+      {page === 'resources' && <ResourcesPage resources={resources} />}
+      {page === 'packing' && (
+        <PackingPage
+          items={packingItems} checks={packingChecks}
+          setChecks={setPackingChecks} me={me}
+        />
+      )}
+      {page === 'admin' && (
+        isAdmin
+          ? <AdminPage
+              config={config} shifts={shifts} resources={resources}
+              packingItems={packingItems} applications={applications} calendar={calendar}
+              updateConfig={updateConfig} updateShifts={updateShifts}
+              updateResources={updateResources} updatePacking={updatePacking}
+              updateCalendar={updateCalendar}
+              onLogout={() => setIsAdmin(false)}
+            />
+          : <AdminLock config={config} onLogin={() => setIsAdmin(true)} />
+      )}
+    </>
   );
 }
