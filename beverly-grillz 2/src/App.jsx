@@ -491,14 +491,11 @@ function HomePage({ config, setPage }) {
         <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
           Apply →
         </button>
-        <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')} style={{ background: 'linear-gradient(135deg, #8B6040, #6B4020)' }}>
+        <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')}>
           Returning Alumna/Alumnus →
         </button>
       </div>
       {config.tagline && <p className="ev-hero-tagline">"{config.tagline}"</p>}
-      {!config.tagline && (
-        <p className="ev-hero-tagline">Built for the wanderers who keep returning to the dust.</p>
-      )}
     </div>
   );
 }
@@ -520,6 +517,7 @@ function ApplicationForm({
     email: me?.email || '',
     phone: me?.phone || '',
     emergency: '',
+    campSponsor: '',
   });
   const [agreed, setAgreed] = useState(config.agreements.map(() => false));
   const [selectedShifts, setSelectedShifts] = useState([]);
@@ -615,6 +613,10 @@ function ApplicationForm({
       </div>
 
       <div className="ev-field">
+        <div>
+          <label className="ev-label">Camp Sponsor's Name</label>
+          <input className="ev-input" placeholder="Who invited you?" {...field('campSponsor')} />
+        </div>
         <label className="ev-label">Email *</label>
         <input className="ev-input" type="email" placeholder="you@example.com" {...field('email')} />
         {errors.email && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
@@ -737,21 +739,68 @@ function RSVPPage({ config, shifts, setShifts, applications, setApplications, me
 // SHIFTS PAGE
 // ============================================================
 
-function ShiftsPage() {
+function ShiftsPage({ shifts, me }) {
+  const DAYS = [
+    { label: 'Sun 8/30', key: 'Sunday' },
+    { label: 'Mon 8/31', key: 'Monday' },
+    { label: 'Tue 9/1',  key: 'Tuesday' },
+    { label: 'Wed 9/2',  key: 'Wednesday' },
+    { label: 'Thu 9/3',  key: 'Thursday' },
+    { label: 'Fri 9/4',  key: 'Friday' },
+    { label: 'Sat 9/5',  key: 'Saturday' },
+    { label: 'Sun 9/6',  key: 'Sunday2' },
+  ];
+  const signupOpen = new Date() >= new Date('2026-08-01T17:00:00');
   return (
     <div className="ev-page">
-      <h1 className="ev-section-h">Shifts</h1>
-      <div className="ev-shifts-notice">
-        <h2>Shift Calendar Will Be Released 8/1/26</h2>
+      <h1 className="ev-section-h">Shift Calendar</h1>
+      <p style={{ textAlign: 'center', color: 'var(--ev-muted)', marginBottom: '1.5rem' }}>
+        Aug 30 – Sept 6, 2026 · Everyone completes 3 shifts
+      </p>
+      {!signupOpen && (
+        <div className="ev-shifts-notice" style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Shift sign-ups open Aug 1 at 5pm</h2>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+        {DAYS.map(({ label, key }) => {
+          const dayKey = key === 'Sunday2' ? 'Sunday' : key;
+          const dayShifts = shifts.filter(s => s.day === dayKey);
+          return (
+            <div key={label} style={{ background: 'var(--ev-card)', borderRadius: '10px', padding: '1rem', border: '1px solid var(--ev-border)' }}>
+              <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', borderBottom: '1px solid var(--ev-border)', paddingBottom: '0.5rem' }}>{label}</div>
+              {dayShifts.length === 0 ? (
+                <div style={{ color: 'var(--ev-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>No shifts scheduled</div>
+              ) : (
+                dayShifts.map(shift => {
+                  const filled = shift.signups?.length || 0;
+                  const full = filled >= shift.capacity;
+                  const isMine = me && shift.signups?.includes(me.name);
+                  return (
+                    <div key={shift.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: 'var(--ev-bg)', borderRadius: '6px', border: '1px solid var(--ev-border)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{shift.name}</div>
+                      <div style={{ color: 'var(--ev-muted)', fontSize: '0.8rem', marginBottom: '0.4rem' }}>{shift.time}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.78rem', color: full ? '#c0392b' : 'var(--ev-muted)' }}>
+                          {filled}/{shift.capacity} spots
+                        </span>
+                        {signupOpen && (
+                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: isMine ? '#27ae60' : full ? '#e0e0e0' : 'var(--ev-accent)', color: isMine || (!full) ? '#fff' : '#888', cursor: full && !isMine ? 'not-allowed' : 'pointer' }}>
+                            {isMine ? 'Signed Up' : full ? 'Full' : 'Sign Up'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
-
-// ============================================================
-// RESOURCES PAGE
-// ============================================================
-
 function ResourcesPage({ resources }) {
   return (
     <div className="ev-page">
