@@ -489,7 +489,7 @@ function HomePage({ config, setPage }) {
       )}
       <div className="ev-hero-actions">
         <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
-          Apply →
+          New Applicants
         </button>
         <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')}>
           Returning Alumna/Alumnus →
@@ -634,7 +634,7 @@ function ApplicationForm({
         {errors.emergency && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.emergency}</p>}
       </div>
 
-      {/* Agreements */}
+      {/* General Agreements */}
       <div style={{ marginBottom: 28 }}>
         <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>Agreements</label>
         {config.agreements.map((ag, i) => (
@@ -659,7 +659,7 @@ function ApplicationForm({
         onClick={submit}
         disabled={submitting}
       >
-        {submitting ? 'Submitting…' : isRsvp ? 'Confirm RSVP' : 'Submit Application'}
+        {submitting ? 'Submitting…' : isRsvp ? 'Continue to Camp Agreements' : 'Submit Application'}
       </button>
     </div>
   );
@@ -1189,7 +1189,115 @@ function AdminLock({ config, onLogin }) {
 // MAIN APP
 // ============================================================
 
-export default function App() {
+export default 
+// ============================================================
+// CAMP AGREEMENTS PAGE
+// ============================================================
+
+const CAMP_AGREEMENTS_LIST = [
+  "I will check in after reasonably after arrival with Terry, Maria, Rana, or Brian",
+  "I will fill in my dates of arrival/departure on the ride share document",
+  "I will demoop my area prior to departure",
+  "I will participate in moop sweeps throughout my time on the playa",
+  "I will contribute materially to strike, regardless of departure date",
+  "I will pack out all of the belongings that I packed in",
+  "I will absolutely not leave my bike or belongings for the truck (for camp gear only)",
+  "I will take bags of trash in my shower (IF I HAVE AN RV)",
+  "I will try to take bags of trash if I have a normal vehicle",
+  "I will return tools and drills to Terry's tool corner on the front of the Coronado",
+  "I will be careful not to take tools or items that may be in use",
+  "I will check IDs at the bar",
+  "I will try to attend camp meetings when possible",
+  "If there is a weather emergency, I will be sure to stay engaged with the camp updates",
+];
+
+function CampAgreementsPage({ me }) {
+  const [checked, setChecked] = React.useState({});
+  const [submitted, setSubmitted] = React.useState(false);
+  const allChecked = CAMP_AGREEMENTS_LIST.every((_, i) => checked[i]);
+
+  if (submitted) {
+    return (
+      <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
+        <h2 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>You're all set!</h2>
+        <p style={{ color: 'var(--ev-muted)' }}>Thank you for reviewing the camp agreements.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Camp Agreements</h1>
+      <div style={{ maxWidth: 600, margin: '0 auto' }}>
+        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--ev-border)' }}>
+          <p style={{ margin: 0, lineHeight: 1.6 }}>
+            Hello Campers! This year we are incorporating an agreements page. Please read and acknowledge — this will help the camp run smoothly.
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
+          {CAMP_AGREEMENTS_LIST.map((item, i) => (
+            <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem', background: checked[i] ? 'rgba(139,96,64,0.08)' : 'var(--ev-card)', borderRadius: 8, border: '1px solid ' + (checked[i] ? 'var(--ev-accent)' : 'var(--ev-border)'), transition: 'all 0.15s' }}>
+              <input
+                type="checkbox"
+                checked={!!checked[i]}
+                onChange={e => setChecked(c => ({ ...c, [i]: e.target.checked }))}
+                style={{ marginTop: '2px', accentColor: 'var(--ev-accent)', width: 18, height: 18, flexShrink: 0 }}
+              />
+              <span style={{ lineHeight: 1.5, fontSize: '0.92rem' }}>{item}</span>
+            </label>
+          ))}
+        </div>
+        <button
+          className="ev-btn ev-btn-primary"
+          disabled={!allChecked}
+          onClick={() => setSubmitted(true)}
+          style={{ width: '100%', opacity: allChecked ? 1 : 0.5, cursor: allChecked ? 'pointer' : 'not-allowed' }}
+        >
+          {allChecked ? 'Submit' : `Check all boxes to continue (${Object.values(checked).filter(Boolean).length}/${CAMP_AGREEMENTS_LIST.length})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CAMP NEEDS PAGE
+// ============================================================
+
+function CampNeedsPage() {
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Camp Needs</h1>
+      <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Items the Camp Needs</h2>
+          <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <li>2–3 simple kitchen burners (new)</li>
+            <li>Bar mats — to keep the bar safer, especially in weather</li>
+          </ul>
+        </div>
+
+        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Projects to Help the Camp</h2>
+          <p style={{ color: 'var(--ev-muted)', fontSize: '0.92rem', margin: 0 }}>More details coming soon. If you have ideas or want to lead a project, reach out!</p>
+        </div>
+
+        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Sub-Task Lead Roles</h2>
+          <p style={{ marginBottom: '0.75rem', fontSize: '0.92rem', color: 'var(--ev-muted)' }}>The camp could use help in these areas. Interested? Let a camp lead know.</p>
+          <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <li>Water Lead</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function App() {
   const [page, setPage] = useState('home');
   const [loading, setLoading] = useState(true);
 
@@ -1258,14 +1366,16 @@ export default function App() {
 
   const NAV_TABS = [
     { id: 'home', label: 'Home' },
-    { id: 'apply', label: 'Apply' },
+    { id: 'apply', label: 'New Applicants' },
     { id: 'rsvp', label: 'RSVP' },
     { id: 'shifts', label: 'Shifts' },
     { id: 'dates', label: 'Dates' },
     { id: 'resources', label: 'Resources' },
     { id: 'packing', label: 'Packing' },
     { id: 'admin', label: 'Admin' },
-  ];
+  ]  { id: 'campNeeds', label: 'Camp Needs' },
+  { id: 'campAgreements', label: 'Agreements' },
+;
 
   if (loading) {
     return (
@@ -1341,6 +1451,8 @@ export default function App() {
         isAdmin
           ? <AdminPage
               config={config} shifts={shifts} resources={resources}
+        {page === 'campAgreements' && <CampAgreementsPage me={me} />}
+        {page === 'campNeeds' && <CampNeedsPage />}
               packingItems={packingItems} applications={applications} calendar={calendar}
               updateConfig={updateConfig} updateShifts={updateShifts}
               updateResources={updateResources} updatePacking={updatePacking}
