@@ -62,7 +62,11 @@ const DEFAULT_RESOURCES = [
 ];
 
 const DEFAULT_CALENDAR = [
-  { id: 'c1', date: '8/1/26', label: 'Shift Calendar Sign Up Release' },
+  { id: 'c1', date: 'Aug 1 at 5pm', label: 'Shift sign-ups open' },
+  { id: 'c2', date: 'Aug 26', label: 'Early crew starts arriving' },
+  { id: 'c3', date: 'Aug 30 – Sept 7, 2026', label: 'Gates Open' },
+  { id: 'c4', date: 'Sept 5', label: 'The Man Burns' },
+  { id: 'c5', date: 'Sept 6', label: 'The Temple Burns' },
 ];
 
 // ============================================================
@@ -752,13 +756,6 @@ function RSVPPage({ config, shifts, setShifts, applications, setApplications, me
 // ============================================================
 
 function ShiftsPage({ shifts, setShifts, me }) {
-  const KEY_DATES = [
-    { date: 'Aug 1 at 5pm', desc: 'Shift sign-ups open' },
-    { date: 'Aug 26', desc: 'Early crew starts arriving' },
-    { date: 'Aug 30 – Sept 7, 2026', desc: 'Gates Open' },
-    { date: 'Sept 5', desc: 'The Man Burns' },
-    { date: 'Sept 6', desc: 'The Temple Burns' },
-  ];
   const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const signupOpen = new Date() >= new Date('2026-08-01T17:00:00');
 
@@ -778,17 +775,6 @@ function ShiftsPage({ shifts, setShifts, me }) {
     <div className="ev-page">
       <h1 className="ev-section-h">Dates &amp; Shifts</h1>
 
-      <div style={{ maxWidth: 560, margin: '0 auto 2.5rem' }}>
-        <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Key Dates</h2>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {KEY_DATES.map(({ date, desc }) => (
-            <div key={date} style={{ display: 'flex', gap: '1rem', padding: '0.6rem 0', borderBottom: '1px solid var(--ev-border)', alignItems: 'baseline' }}>
-              <span style={{ fontWeight: 600, minWidth: 180, fontSize: '0.9rem', flexShrink: 0 }}>{date}</span>
-              <span style={{ color: 'var(--ev-muted)', fontSize: '0.9rem' }}>{desc}</span>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shifts</h2>
@@ -1223,7 +1209,6 @@ function AdminLock({ config, onLogin }) {
 // MAIN APP
 // ============================================================
 
-export default 
 // ============================================================
 // CAMP AGREEMENTS PAGE
 // ============================================================
@@ -1331,7 +1316,7 @@ function CampNeedsPage() {
   );
 }
 
-function App() {
+export default function App() {
   const [page, setPage] = useState('home');
   const [loading, setLoading] = useState(true);
 
