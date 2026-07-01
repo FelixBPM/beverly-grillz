@@ -1392,9 +1392,9 @@ export default function App() {
     { id: 'resources', label: 'Resources' },
     { id: 'packing', label: 'Packing' },
     { id: 'admin', label: 'Admin' },
-  ]  { id: 'campNeeds', label: 'Camp Needs' },
-  { id: 'campAgreements', label: 'Agreements' },
-;
+    { id: 'campNeeds', label: 'Camp Needs' },
+    { id: 'campAgreements', label: 'Agreements' },
+  ];
 
   if (loading) {
     return (
