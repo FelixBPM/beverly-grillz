@@ -652,7 +652,7 @@ function ApplicationForm({
 
       {/* General Agreements */}
       <div style={{ marginBottom: 28 }}>
-        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>Agreements</label>
+        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>General Agreements</label>
         {config.agreements.map((ag, i) => (
           <div key={i} className="ev-agreement">
             <input
