@@ -1466,12 +1466,12 @@ export default function App() {
           setChecks={setPackingChecks} me={me}
         />
       )}
+      {page === 'campAgreements' && <CampAgreementsPage me={me} />}
+      {page === 'campNeeds' && <CampNeedsPage />}
       {page === 'admin' && (
         isAdmin
           ? <AdminPage
               config={config} shifts={shifts} resources={resources}
-        {page === 'campAgreements' && <CampAgreementsPage me={me} />}
-        {page === 'campNeeds' && <CampNeedsPage />}
               packingItems={packingItems} applications={applications} calendar={calendar}
               updateConfig={updateConfig} updateShifts={updateShifts}
               updateResources={updateResources} updatePacking={updatePacking}
