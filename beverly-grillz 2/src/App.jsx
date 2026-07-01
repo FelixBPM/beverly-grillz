@@ -21,6 +21,8 @@ const DEFAULT_CONFIG = {
   adminPassword: "admin123",
   eventPassword: "hospitable",
   applicationsOpen: true,
+  applicationsSheet: '',
+  rsvpSheet: '',
 };
 
 const DEFAULT_SHIFTS = [
@@ -585,8 +587,18 @@ function ApplicationForm({
     await save('applications', newApplications, true);
     setApplications(newApplications);
 
+    // Post to Google Sheet if configured
+    const sheetUrl = isRsvp ? config.rsvpSheet : config.applicationsSheet;
+    if (sheetUrl) {
+      fetch(sheetUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ type: isRsvp ? 'rsvp' : 'application', ...form, submittedAt: new Date().toISOString() })
+      }).catch(() => {});
+    }
     setSubmitting(false);
-    onSuccess();
+    if (typeof onSuccess === 'function') onSuccess();
   };
 
   if (!config.applicationsOpen && !isRsvp) {
@@ -739,64 +751,86 @@ function RSVPPage({ config, shifts, setShifts, applications, setApplications, me
 // SHIFTS PAGE
 // ============================================================
 
-function ShiftsPage({ shifts, me }) {
-  const DAYS = [
-    { label: 'Sun 8/30', key: 'Sunday' },
-    { label: 'Mon 8/31', key: 'Monday' },
-    { label: 'Tue 9/1',  key: 'Tuesday' },
-    { label: 'Wed 9/2',  key: 'Wednesday' },
-    { label: 'Thu 9/3',  key: 'Thursday' },
-    { label: 'Fri 9/4',  key: 'Friday' },
-    { label: 'Sat 9/5',  key: 'Saturday' },
-    { label: 'Sun 9/6',  key: 'Sunday2' },
+function ShiftsPage({ shifts, setShifts, me }) {
+  const KEY_DATES = [
+    { date: 'Aug 1 at 5pm', desc: 'Shift sign-ups open' },
+    { date: 'Aug 26', desc: 'Early crew starts arriving' },
+    { date: 'Aug 30 – Sept 7, 2026', desc: 'Gates Open' },
+    { date: 'Sept 5', desc: 'The Man Burns' },
+    { date: 'Sept 6', desc: 'The Temple Burns' },
   ];
+  const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const signupOpen = new Date() >= new Date('2026-08-01T17:00:00');
+
+  const toggleSignup = async (shiftId) => {
+    if (!me) return;
+    const updated = shifts.map(s => {
+      if (s.id !== shiftId) return s;
+      const signups = s.signups || [];
+      const idx = signups.indexOf(me.name);
+      return { ...s, signups: idx >= 0 ? signups.filter(n => n !== me.name) : [...signups, me.name] };
+    });
+    setShifts(updated);
+    await save('shifts', updated, true);
+  };
+
   return (
     <div className="ev-page">
-      <h1 className="ev-section-h">Shift Calendar</h1>
-      <p style={{ textAlign: 'center', color: 'var(--ev-muted)', marginBottom: '1.5rem' }}>
-        Aug 30 – Sept 6, 2026 · Everyone completes 3 shifts
-      </p>
-      {!signupOpen && (
-        <div className="ev-shifts-notice" style={{ marginBottom: '1.5rem' }}>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Shift sign-ups open Aug 1 at 5pm</h2>
+      <h1 className="ev-section-h">Dates &amp; Shifts</h1>
+
+      <div style={{ maxWidth: 560, margin: '0 auto 2.5rem' }}>
+        <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Key Dates</h2>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {KEY_DATES.map(({ date, desc }) => (
+            <div key={date} style={{ display: 'flex', gap: '1rem', padding: '0.6rem 0', borderBottom: '1px solid var(--ev-border)', alignItems: 'baseline' }}>
+              <span style={{ fontWeight: 600, minWidth: 180, fontSize: '0.9rem', flexShrink: 0 }}>{date}</span>
+              <span style={{ color: 'var(--ev-muted)', fontSize: '0.9rem' }}>{desc}</span>
+            </div>
+          ))}
         </div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-        {DAYS.map(({ label, key }) => {
-          const dayKey = key === 'Sunday2' ? 'Sunday' : key;
-          const dayShifts = shifts.filter(s => s.day === dayKey);
-          return (
-            <div key={label} style={{ background: 'var(--ev-card)', borderRadius: '10px', padding: '1rem', border: '1px solid var(--ev-border)' }}>
-              <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', borderBottom: '1px solid var(--ev-border)', paddingBottom: '0.5rem' }}>{label}</div>
-              {dayShifts.length === 0 ? (
-                <div style={{ color: 'var(--ev-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>No shifts scheduled</div>
-              ) : (
-                dayShifts.map(shift => {
-                  const filled = shift.signups?.length || 0;
-                  const full = filled >= shift.capacity;
-                  const isMine = me && shift.signups?.includes(me.name);
-                  return (
-                    <div key={shift.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: 'var(--ev-bg)', borderRadius: '6px', border: '1px solid var(--ev-border)' }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{shift.name}</div>
-                      <div style={{ color: 'var(--ev-muted)', fontSize: '0.8rem', marginBottom: '0.4rem' }}>{shift.time}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.78rem', color: full ? '#c0392b' : 'var(--ev-muted)' }}>
-                          {filled}/{shift.capacity} spots
-                        </span>
-                        {signupOpen && (
-                          <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: isMine ? '#27ae60' : full ? '#e0e0e0' : 'var(--ev-accent)', color: isMine || (!full) ? '#fff' : '#888', cursor: full && !isMine ? 'not-allowed' : 'pointer' }}>
-                            {isMine ? 'Signed Up' : full ? 'Full' : 'Sign Up'}
-                          </span>
+      </div>
+
+      <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shifts</h2>
+        {!signupOpen ? (
+          <div className="ev-shifts-notice">
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Check back 5pm 8/1/26</h2>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {DAYS.map(day => {
+              const dayShifts = shifts.filter(s => s.day === day);
+              if (!dayShifts.length) return null;
+              return (
+                <div key={day} style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1rem', border: '1px solid var(--ev-border)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ev-accent)' }}>{day}</div>
+                  {dayShifts.map(shift => {
+                    const filled = shift.signups?.length || 0;
+                    const full = filled >= shift.capacity;
+                    const isMine = me && shift.signups?.includes(me.name);
+                    return (
+                      <div key={shift.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--ev-border)' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{shift.name}</div>
+                          <div style={{ color: 'var(--ev-muted)', fontSize: '0.8rem' }}>{shift.time} · {filled}/{shift.capacity} spots</div>
+                        </div>
+                        {me && (
+                          <button
+                            onClick={() => toggleSignup(shift.id)}
+                            disabled={full && !isMine}
+                            style={{ fontSize: '0.8rem', padding: '4px 12px', borderRadius: 6, border: 'none', cursor: full && !isMine ? 'not-allowed' : 'pointer', background: isMine ? '#27ae60' : full ? 'var(--ev-border)' : 'var(--ev-accent)', color: isMine || (!full) ? '#fff' : 'var(--ev-muted)' }}
+                          >
+                            {isMine ? 'Signed Up ✓' : full ? 'Full' : 'Sign Up'}
+                          </button>
                         )}
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          );
-        })}
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1115,7 +1149,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, cale
 
   const tabs = [
     { id: 'config', label: 'Event Info' },
-    { id: 'shifts', label: 'Shifts' },
+    { id: 'shifts', label: 'Dates & Shifts' },
     { id: 'packing', label: 'Packing' },
     { id: 'resources', label: 'Resources' },
     { id: 'calendar', label: 'Calendar' },
@@ -1438,7 +1472,7 @@ function App() {
           me={me} setMe={setMe}
         />
       )}
-      {page === 'shifts' && <ShiftsPage shifts={shifts} me={me} />}
+      {page === 'shifts' && <ShiftsPage shifts={shifts} setShifts={setShifts} me={me} />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
       {page === 'resources' && <ResourcesPage resources={resources} />}
       {page === 'packing' && (
