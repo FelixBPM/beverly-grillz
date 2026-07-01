@@ -1454,7 +1454,7 @@ export default function App() {
         <RSVPPage
           config={config} shifts={shifts} setShifts={setShifts}
           applications={applications} setApplications={setApplications}
-          me={me} setMe={setMe}
+          me={me} setMe={setMe} setPage={setPage}
         />
       )}
       {page === 'shifts' && <ShiftsPage shifts={shifts} setShifts={setShifts} me={me} />}
