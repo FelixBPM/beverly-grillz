@@ -1239,8 +1239,8 @@ const CAMP_AGREEMENTS_LIST = [
 ];
 
 function CampAgreementsPage({ me }) {
-  const [checked, setChecked] = React.useState({});
-  const [submitted, setSubmitted] = React.useState(false);
+  const [checked, setChecked] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const allChecked = CAMP_AGREEMENTS_LIST.every((_, i) => checked[i]);
 
   if (submitted) {
