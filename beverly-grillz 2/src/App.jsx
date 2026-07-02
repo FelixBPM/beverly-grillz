@@ -947,6 +947,14 @@ function AdminConfig({ config, updateConfig }) {
         <label className="ev-label">Minimum shifts required</label>
         <input className="ev-input" type="number" {...f('shiftRequirement')} />
       </div>
+      <div className="ev-field">
+        <label className="ev-label">Applications Sheet URL (Google Apps Script)</label>
+        <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('applicationsSheet')} />
+      </div>
+      <div className="ev-field">
+        <label className="ev-label">RSVP Sheet URL (Google Apps Script)</label>
+        <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('rsvpSheet')} />
+      </div>
 
       <button className="ev-btn ev-btn-primary" onClick={() => updateConfig(form)}>Save changes</button>
     </div>
