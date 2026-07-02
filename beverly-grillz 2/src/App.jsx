@@ -64,7 +64,8 @@ const DEFAULT_RESOURCES = [
 const DEFAULT_CALENDAR = [
   { id: 'c1', date: 'Aug 1 at 5pm', label: 'Shift sign-ups open' },
   { id: 'c2', date: 'Aug 26', label: 'Early crew starts arriving' },
-  { id: 'c3', date: 'Aug 30 – Sept 7, 2026', label: 'Gates Open' },
+  { id: 'c3', date: 'Aug 30th', label: 'The Gates Open / Burningman Starts' },
+  { id: 'c6', date: 'September 7th', label: 'Burningman Ends!' },
   { id: 'c4', date: 'Sept 5', label: 'The Man Burns' },
   { id: 'c5', date: 'Sept 6', label: 'The Temple Burns' },
 ];
