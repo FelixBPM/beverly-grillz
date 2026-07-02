@@ -56,9 +56,9 @@ const DEFAULT_PACKING = [
 ];
 
 const DEFAULT_RESOURCES = [
-  { id: 'r1', name: 'Camp Map', kind: 'image', url: '', description: 'Site layout & landmarks' },
+  { id: 'r1', name: 'Camp Map', kind: 'image', url: '/d0487e7d-ae32-43e9-9b7d-d1666ed90116.jpg', description: 'Site layout & landmarks' },
   { id: 'r2', name: 'Full Schedule', kind: 'pdf', url: '#', description: 'Thursday through Sunday' },
-  { id: 'r3', name: 'Driving Directions', kind: 'pdf', url: '#', description: 'Final approach & GPS coords' },
+  { id: 'r3', name: 'Production Schedule Flyer', kind: 'pdf', url: '#', description: '(under construction)' },
 ];
 
 const DEFAULT_CALENDAR = [
@@ -129,7 +129,10 @@ const CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    background: #100804;
+    background-color: #100804;
+    background-image: linear-gradient(rgba(200,149,108,0.04), rgba(200,149,108,0.04)), url('/bg-texture.jpg');
+    background-size: cover;
+    background-attachment: fixed;
     color: #FBF0E0;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
