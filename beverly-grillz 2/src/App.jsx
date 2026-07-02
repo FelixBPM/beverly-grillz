@@ -18,7 +18,7 @@ const DEFAULT_CONFIG = {
     "I understand my contact info will only be used for event coordination.",
   ],
   shiftRequirement: 3,
-  adminPassword: "admin123",
+  adminPassword: "Thunderfuck",
   eventPassword: "hospitable",
   applicationsOpen: true,
   applicationsSheet: '',
