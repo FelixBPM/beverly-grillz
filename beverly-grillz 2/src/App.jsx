@@ -324,14 +324,10 @@ const CSS = `
     font-size: 26px; font-weight: 400; color: #FBF0E0; margin-bottom: 10px;
   }
   .ev-shifts-notice p { color: #A88876; font-size: 14px; line-height: 1.6; }
-  .ev-shift-card {
-    background: #0F0805; border: 1px solid #1E100A; border-radius: 10px;
-    padding: 16px 20px; margin-bottom: 10px;
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  .ev-shifts-frame {
+    width: 100%; min-height: 600px; border: 1px solid #2A1810;
+    border-radius: 10px; background: #0F0805; display: block;
   }
-  .ev-shift-info h3 { font-size: 15px; font-weight: 500; color: #FBF0E0; margin-bottom: 2px; }
-  .ev-shift-info p { font-size: 13px; color: #6B5749; }
-  .ev-shift-meta { font-size: 12px; color: #A88876; white-space: nowrap; }
 
   /* --- RESOURCES --- */
   .ev-resource-card {
@@ -388,6 +384,26 @@ const CSS = `
   }
   .ev-agreement input[type=checkbox] { margin-top: 2px; accent-color: #C8956C; flex-shrink: 0; }
   .ev-agreement span { font-size: 13px; color: #A88876; line-height: 1.5; }
+
+  /* --- ACCOMMODATION MATRIX --- */
+  .ev-matrix { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .ev-matrix th {
+    padding: 10px 12px; text-align: center; color: #A88876;
+    font-weight: 500; font-size: 13px; border-bottom: 1px solid #2A1810;
+  }
+  .ev-matrix th:first-child { text-align: left; min-width: 64px; }
+  .ev-matrix td {
+    padding: 14px 12px; text-align: center;
+    border-bottom: 1px solid #1A0C06;
+  }
+  .ev-matrix td:first-child {
+    text-align: left; color: #FBF0E0;
+    font-weight: 600; letter-spacing: 0.04em;
+  }
+  .ev-matrix tr:hover td { background: rgba(200,149,108,0.04); }
+  .ev-matrix input[type=checkbox] {
+    width: 18px; height: 18px; accent-color: #C8956C; cursor: pointer;
+  }
 `;
 
 function InjectCSS() {
@@ -499,10 +515,7 @@ function HomePage({ config, setPage }) {
       )}
       <div className="ev-hero-actions">
         <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
-          New Applicants
-        </button>
-        <button className="ev-btn ev-btn-primary" onClick={() => setPage('rsvp')}>
-          Returning Alumna/Alumnus →
+          Apply for 2026 →
         </button>
       </div>
       {config.tagline && <p className="ev-hero-tagline">"{config.tagline}"</p>}
@@ -511,27 +524,37 @@ function HomePage({ config, setPage }) {
 }
 
 // ============================================================
-// SHARED FORM COMPONENT (used by both Apply & RSVP)
+// UNIFIED APPLY PAGE (new applicants + returning members)
 // ============================================================
 
-function ApplicationForm({
-  config, shifts, setShifts, applications, setApplications, me, setMe,
-  formType, // 'apply' | 'rsvp'
-  onSuccess,
-}) {
-  const isRsvp = formType === 'rsvp';
+const ARRIVAL_DAYS = [
+  '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
+  'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
+  'Sept 3', 'Sept 4', 'Sept 5', 'Sept 6', 'Sept 7',
+];
 
+const DEPARTURE_DAYS = [
+  '', 'Aug 30', 'Aug 31', 'Sept 1', 'Sept 2', 'Sept 3', 'Sept 4',
+  'Sept 5 (Man burns)', 'Sept 6 (Temple burns)', 'Sept 7 (BM ends)',
+  'Sept 8', 'Sept 9', 'Sept 10', 'Sept 11', 'Sept 12 or later',
+];
+
+function UnifiedApplyPage({ config, onContinueToAgreements }) {
+  const [memberType, setMemberType] = useState('returning'); // 'new' | 'returning'
   const [form, setForm] = useState({
-    name: me?.name || '',
-    playaName: me?.playaName || '',
-    email: me?.email || '',
-    phone: me?.phone || '',
+    name: '',
+    playaName: '',
+    email: '',
+    arrivalDay: '',
+    departureDay: '',
+    dietary: '',
     emergency: '',
-    campSponsor: '',
+    rideshare: '',
+    campingWith: '',
   });
-  const [agreed, setAgreed] = useState(config.agreements.map(() => false));
-  const [selectedShifts, setSelectedShifts] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [accom, setAccom] = useState('');       // 'tent' | 'rv'
+  const [needsPower, setNeedsPower] = useState(false);
+  const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
   const [errors, setErrors] = useState({});
 
   const field = (key) => ({
@@ -539,292 +562,243 @@ function ApplicationForm({
     onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
   });
 
-  const toggleShift = (shiftId) => {
-    setSelectedShifts(prev =>
-      prev.includes(shiftId) ? prev.filter(id => id !== shiftId) : [...prev, shiftId]
-    );
+  // Matrix interaction: switching rows resets power/dues
+  const handleMatrix = (type, col, checked) => {
+    if (accom !== type) {
+      setAccom(type);
+      setNeedsPower(col === 'power' ? checked : false);
+      setDuesStatus(col === 'paid' ? (checked ? 'paid' : '') : col === 'will-talk' ? (checked ? 'will-talk' : '') : '');
+    } else {
+      if (col === 'power') setNeedsPower(checked);
+      if (col === 'paid') setDuesStatus(checked ? 'paid' : '');
+      if (col === 'will-talk') setDuesStatus(checked ? 'will-talk' : '');
+    }
   };
 
   const validate = () => {
     const errs = {};
     if (!form.name.trim()) errs.name = 'Required';
     if (!form.email.trim()) errs.email = 'Required';
-    if (!form.phone.trim()) errs.phone = 'Required';
     if (!form.emergency.trim()) errs.emergency = 'Required';
-    if (!agreed.every(Boolean)) errs.agreements = 'Please agree to all statements';
+    if (!accom) errs.accom = 'Please indicate Tent or RV';
     return errs;
   };
 
-  const submit = async () => {
+  const handleContinue = () => {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    setSubmitting(true);
-
-    const myId = me?.id || newId();
-    const newMe = { id: myId, name: form.name, playaName: form.playaName, email: form.email, phone: form.phone };
-    await save('me', newMe, false);
-    setMe(newMe);
-
-    // Sign up for shifts
-    let updatedShifts = shifts;
-    if (selectedShifts.length > 0) {
-      updatedShifts = shifts.map(sh => {
-        if (!selectedShifts.includes(sh.id)) return sh;
-        if (sh.signups.some(s => s.id === myId)) return sh;
-        if (sh.signups.length >= sh.capacity) return sh;
-        return { ...sh, signups: [...sh.signups, { id: myId, name: form.name }] };
-      });
-      await save('shifts', updatedShifts, true);
-      setShifts(updatedShifts);
-    }
-
-    const application = {
-      id: newId(),
-      userId: myId,
-      type: formType,
-      name: form.name,
-      playaName: form.playaName,
-      email: form.email,
-      phone: form.phone,
-      emergency: form.emergency,
-      shifts: selectedShifts,
-      appliedAt: new Date().toISOString(),
-    };
-
-    const newApplications = [...applications, application];
-    await save('applications', newApplications, true);
-    setApplications(newApplications);
-
-    // Post to Google Sheet if configured
-    const sheetUrl = isRsvp ? config.rsvpSheet : config.applicationsSheet;
-    if (sheetUrl) {
-      fetch(sheetUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ type: isRsvp ? 'rsvp' : 'application', ...form, submittedAt: new Date().toISOString() })
-      }).catch(() => {});
-    }
-    setSubmitting(false);
-    if (typeof onSuccess === 'function') onSuccess();
+    onContinueToAgreements({
+      memberType,
+      ...form,
+      accommodationType: accom,
+      needsPower,
+      duesStatus,
+      submittedAt: new Date().toISOString(),
+    });
   };
 
-  if (!config.applicationsOpen && !isRsvp) {
+  if (!config.applicationsOpen) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 0', color: '#6B5749' }}>
-        <Giraffe size={48} style={{ marginBottom: 16 }} />
+      <div className="ev-page" style={{ textAlign: 'center', paddingTop: 60 }}>
+        <Giraffe size={48} style={{ marginBottom: 16, color: '#C8956C' }} />
         <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, color: '#FBF0E0', marginBottom: 8 }}>Applications closed</p>
-        <p style={{ fontSize: 14 }}>Check back soon or contact camp leadership.</p>
+        <p style={{ fontSize: 14, color: '#6B5749' }}>Check back soon or contact camp leadership.</p>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="ev-page">
+      <div className="ev-form-header">
+        <h1>Apply for 2026</h1>
+        <p>Fill out the form below to secure your spot at Beverly Grillz. After submitting you'll review and sign the camp agreements.</p>
+      </div>
+
+      {/* New vs Returning */}
       <div className="ev-field">
-        <label className="ev-label">Full Name *</label>
-        <input className="ev-input" placeholder="Your legal name" {...field('name')} />
+        <label className="ev-label" style={{ fontSize: 14, color: '#FBF0E0', marginBottom: 10 }}>Are you new to Beverly Grillz or a returning member?</label>
+        <div style={{ display: 'flex', gap: 12 }}>
+          {[
+            { val: 'returning', label: 'Returning Member' },
+            { val: 'new', label: 'New to Beverly Grillz' },
+          ].map(({ val, label }) => (
+            <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '10px 16px', borderRadius: 8, border: '1px solid ' + (memberType === val ? '#C8956C' : '#2A1810'), background: memberType === val ? 'rgba(200,149,108,0.08)' : '#0F0805', transition: 'all .15s', flex: 1, justifyContent: 'center' }}>
+              <input type="radio" name="memberType" value={val} checked={memberType === val} onChange={() => setMemberType(val)} style={{ accentColor: '#C8956C' }} />
+              <span style={{ fontSize: 14, color: memberType === val ? '#FBF0E0' : '#A88876' }}>{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Name */}
+      <div className="ev-field">
+        <label className="ev-label">Your Name *</label>
+        <input className="ev-input" placeholder="Your full name" {...field('name')} />
         {errors.name && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.name}</p>}
       </div>
 
+      {/* Playa Name */}
       <div className="ev-field">
-        <label className="ev-label">Playa Name</label>
+        <label className="ev-label">Your Playa Name</label>
         <input className="ev-input" placeholder="Your playa name (if you have one)" {...field('playaName')} />
       </div>
 
+      {/* Email */}
       <div className="ev-field">
-        <div>
-          <label className="ev-label">Camp Sponsor's Name</label>
-          <input className="ev-input" placeholder="Who invited you?" {...field('campSponsor')} />
-        </div>
         <label className="ev-label">Email *</label>
         <input className="ev-input" type="email" placeholder="you@example.com" {...field('email')} />
         {errors.email && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
       </div>
 
-      <div className="ev-field">
-        <label className="ev-label">Phone *</label>
-        <input className="ev-input" type="tel" placeholder="(555) 000-0000" {...field('phone')} />
-        {errors.phone && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.phone}</p>}
+      {/* Arrival / Departure */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="ev-field">
+          <label className="ev-label">Which day are you planning to arrive?</label>
+          <select className="ev-select" value={form.arrivalDay} onChange={e => setForm(f => ({ ...f, arrivalDay: e.target.value }))}>
+            {ARRIVAL_DAYS.map(d => <option key={d} value={d}>{d || '— Select a day —'}</option>)}
+          </select>
+        </div>
+        <div className="ev-field">
+          <label className="ev-label">Which day are you planning to leave?</label>
+          <select className="ev-select" value={form.departureDay} onChange={e => setForm(f => ({ ...f, departureDay: e.target.value }))}>
+            {DEPARTURE_DAYS.map(d => <option key={d} value={d}>{d || '— Select a day —'}</option>)}
+          </select>
+        </div>
       </div>
 
+      {/* Dietary */}
+      <div className="ev-field">
+        <label className="ev-label">Dietary Restrictions / Allergies</label>
+        <textarea className="ev-textarea" placeholder="Any dietary needs or allergies we should know about?" rows={2} {...field('dietary')} />
+      </div>
+
+      {/* Emergency Contact */}
       <div className="ev-field">
         <label className="ev-label">Emergency Contact *</label>
         <input className="ev-input" placeholder="Name & phone number" {...field('emergency')} />
         {errors.emergency && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.emergency}</p>}
       </div>
 
-      {/* General Agreements */}
-      <div style={{ marginBottom: 28 }}>
-        <label className="ev-label" style={{ fontSize: 15, marginBottom: 12 }}>General Agreements</label>
-        {config.agreements.map((ag, i) => (
-          <div key={i} className="ev-agreement">
-            <input
-              type="checkbox"
-              id={`ag-${i}`}
-              checked={agreed[i]}
-              onChange={() => setAgreed(a => a.map((v, j) => j === i ? !v : v))}
-            />
-            <label htmlFor={`ag-${i}`} style={{ fontSize: 13, color: '#A88876', lineHeight: 1.5, cursor: 'pointer' }}>
-              {ag}
-            </label>
-          </div>
-        ))}
-        {errors.agreements && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.agreements}</p>}
+      {/* Rideshare */}
+      <div className="ev-field">
+        <label className="ev-label">Do you need a ride in or out? Can you offer a ride?</label>
+        <textarea className="ev-textarea" placeholder="Let us know if you need a ride or can offer one. Include pickup/dropoff location if helpful." rows={2} {...field('rideshare')} />
       </div>
 
-      <button
-        className="ev-btn ev-btn-primary"
-        style={{ width: '100%', padding: '14px' }}
-        onClick={submit}
-        disabled={submitting}
-      >
-        {submitting ? 'Submitting…' : isRsvp ? 'Continue to Camp Agreements' : 'Submit Application'}
-      </button>
+      {/* Who camping with */}
+      <div className="ev-field">
+        <label className="ev-label">Who are you camping with?</label>
+        <input className="ev-input" placeholder="Names of people in your camp group" {...field('campingWith')} />
+      </div>
+
+      {/* Accommodation matrix */}
+      <div className="ev-field" style={{ marginTop: 8 }}>
+        <p style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 600, marginBottom: 4 }}>
+          Will you be in a <strong>TENT</strong> or <strong>RV</strong>? <span style={{ color: '#8B3020' }}>*</span>
+        </p>
+        <p style={{ fontSize: 13, color: '#A88876', marginBottom: 6 }}>
+          Have you <strong>PAID</strong> your camp donation?
+        </p>
+        <p style={{ fontSize: 13, color: '#A88876', marginBottom: 12 }}>
+          Will you need <strong>POWER</strong> to your Tent or RV?{' '}
+          <em>(Additional power costs for RV's and Tents, talk to a Camp Lead)</em>
+        </p>
+        <div style={{ overflowX: 'auto', background: '#0F0805', borderRadius: 10, border: '1px solid #2A1810', padding: '4px 0' }}>
+          <table className="ev-matrix">
+            <thead>
+              <tr>
+                <th></th>
+                <th>I Will Need Power Hookup</th>
+                <th>Paid Dues!</th>
+                <th>Haven't Paid Dues Yet, Will Talk to a Lead</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[{ type: 'tent', label: 'Tent' }, { type: 'rv', label: 'RV' }].map(({ type, label }) => (
+                <tr key={type} style={{ background: accom === type ? 'rgba(200,149,108,0.06)' : 'transparent' }}>
+                  <td>{label}</td>
+                  <td>
+                    <input type="checkbox"
+                      checked={accom === type && needsPower}
+                      onChange={e => handleMatrix(type, 'power', e.target.checked)}
+                    />
+                  </td>
+                  <td>
+                    <input type="checkbox"
+                      checked={accom === type && duesStatus === 'paid'}
+                      onChange={e => handleMatrix(type, 'paid', e.target.checked)}
+                    />
+                  </td>
+                  <td>
+                    <input type="checkbox"
+                      checked={accom === type && duesStatus === 'will-talk'}
+                      onChange={e => handleMatrix(type, 'will-talk', e.target.checked)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {errors.accom && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 6 }}>{errors.accom}</p>}
+      </div>
+
+      <div style={{ marginTop: 32 }}>
+        <button
+          className="ev-btn ev-btn-primary"
+          style={{ width: '100%', padding: '14px', fontSize: 15 }}
+          onClick={handleContinue}
+        >
+          Continue to Camp Agreements →
+        </button>
+        <p style={{ fontSize: 12, color: '#6B5749', textAlign: 'center', marginTop: 10 }}>
+          You'll review and sign the camp agreements on the next step before your application is submitted.
+        </p>
+      </div>
     </div>
   );
 }
 
 // ============================================================
-// APPLY PAGE — first-timers
+// SHIFTS PAGE — Google Sheet embed
 // ============================================================
 
-function ApplyPage({ config, shifts, setShifts, applications, setApplications, me, setMe }) {
-  const [success, setSuccess] = useState(false);
+const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1H4MEzoPnO7iqbYyBIZAHsDTlE-tjyIe-/htmlview?gid=268906453';
 
+function ShiftsPage() {
   return (
-    <div className="ev-page">
-      {success && (
-        <SuccessModal
-          message="Thanks for your submission!"
-          subMessage="Someone from camp leadership will be in touch in the coming weeks."
-          onClose={() => setSuccess(false)}
-        />
-      )}
-      <div className="ev-form-header">
-        <h1>Apply</h1>
-        <p>First time at Beverly Grillz? We'd love to have you. Fill out the form below and we'll be in touch.</p>
+    <div className="ev-page-wide">
+      <h1 className="ev-section-h">Shifts</h1>
+      <p className="ev-section-sub">Sign up for your shifts using the live spreadsheet below. You must complete at least 3 shifts.</p>
+
+      <div style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 20 }}>📋</span>
+        <div>
+          <p style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500, marginBottom: 2 }}>Live Shifts Spreadsheet</p>
+          <p style={{ fontSize: 13, color: '#6B5749' }}>
+            The sheet updates in real time. Can't see it?{' '}
+            <a href={SHIFTS_SHEET_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#C8956C', textDecoration: 'underline' }}>
+              Open in a new tab →
+            </a>
+          </p>
+        </div>
       </div>
-      <ApplicationForm
-        config={config}
-        shifts={shifts}
-        setShifts={setShifts}
-        applications={applications}
-        setApplications={setApplications}
-        me={me}
-        setMe={setMe}
-        formType="apply"
-        onSuccess={() => setSuccess(true)}
+
+      <iframe
+        src={SHIFTS_SHEET_URL}
+        className="ev-shifts-frame"
+        title="Beverly Grillz Shifts"
+        frameBorder="0"
+        allowFullScreen
       />
     </div>
   );
 }
 
 // ============================================================
-// RSVP PAGE — returning alumni
+// RESOURCES PAGE
 // ============================================================
 
-function RSVPPage({ config, shifts, setShifts, applications, setApplications, me, setMe }) {
-  const [success, setSuccess] = useState(false);
-
-  return (
-    <div className="ev-page">
-      {success && (
-        <SuccessModal
-          message="Welcome back!"
-          subMessage="Your response has been recorded."
-          onClose={() => setSuccess(false)}
-        />
-      )}
-      <div className="ev-form-header">
-        <h1>RSVP</h1>
-        <p>Welcome back to the dust. Confirm your spot for this year's Beverly Grillz.</p>
-      </div>
-      <ApplicationForm
-        config={config}
-        shifts={shifts}
-        setShifts={setShifts}
-        applications={applications}
-        setApplications={setApplications}
-        me={me}
-        setMe={setMe}
-        formType="rsvp"
-        onSuccess={() => setSuccess(true)}
-      />
-    </div>
-  );
-}
-
-// ============================================================
-// SHIFTS PAGE
-// ============================================================
-
-function ShiftsPage({ shifts, setShifts, me }) {
-  const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const signupOpen = new Date() >= new Date('2026-08-01T17:00:00');
-
-  const toggleSignup = async (shiftId) => {
-    if (!me) return;
-    const updated = shifts.map(s => {
-      if (s.id !== shiftId) return s;
-      const signups = s.signups || [];
-      const idx = signups.indexOf(me.name);
-      return { ...s, signups: idx >= 0 ? signups.filter(n => n !== me.name) : [...signups, me.name] };
-    });
-    setShifts(updated);
-    await save('shifts', updated, true);
-  };
-
-  return (
-    <div className="ev-page">
-      <h1 className="ev-section-h">Dates &amp; Shifts</h1>
-
-
-      <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <h2 style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '0.75rem', color: 'var(--ev-accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shifts</h2>
-        {!signupOpen ? (
-          <div className="ev-shifts-notice">
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Check back 5pm 8/1/26</h2>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {DAYS.map(day => {
-              const dayShifts = shifts.filter(s => s.day === day);
-              if (!dayShifts.length) return null;
-              return (
-                <div key={day} style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1rem', border: '1px solid var(--ev-border)' }}>
-                  <div style={{ fontWeight: 700, marginBottom: '0.75rem', color: 'var(--ev-accent)' }}>{day}</div>
-                  {dayShifts.map(shift => {
-                    const filled = shift.signups?.length || 0;
-                    const full = filled >= shift.capacity;
-                    const isMine = me && shift.signups?.includes(me.name);
-                    return (
-                      <div key={shift.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid var(--ev-border)' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{shift.name}</div>
-                          <div style={{ color: 'var(--ev-muted)', fontSize: '0.8rem' }}>{shift.time} · {filled}/{shift.capacity} spots</div>
-                        </div>
-                        {me && (
-                          <button
-                            onClick={() => toggleSignup(shift.id)}
-                            disabled={full && !isMine}
-                            style={{ fontSize: '0.8rem', padding: '4px 12px', borderRadius: 6, border: 'none', cursor: full && !isMine ? 'not-allowed' : 'pointer', background: isMine ? '#27ae60' : full ? 'var(--ev-border)' : 'var(--ev-accent)', color: isMine || (!full) ? '#fff' : 'var(--ev-muted)' }}
-                          >
-                            {isMine ? 'Signed Up ✓' : full ? 'Full' : 'Sign Up'}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 function ResourcesPage({ resources }) {
   return (
     <div className="ev-page">
@@ -857,7 +831,7 @@ function ResourcesPage({ resources }) {
 // PACKING PAGE
 // ============================================================
 
-function PackingPage({ items, checks, setChecks, me }) {
+function PackingPage({ items, checks, setChecks }) {
   const toggle = async (item) => {
     const next = { ...checks, [item]: !checks[item] };
     setChecks(next);
@@ -926,8 +900,8 @@ function AdminConfig({ config, updateConfig }) {
       <div className="ev-field"><label className="ev-label">Event Name</label><input className="ev-input" {...f('eventName')} /></div>
       <div className="ev-field"><label className="ev-label">Tagline</label><input className="ev-input" {...f('tagline')} /></div>
       <div className="ev-field"><label className="ev-label">Year</label><input className="ev-input" type="number" {...f('year')} /></div>
-      <div className="ev-field"><label className="ev-label">Dates</label><input className="ev-input" placeholder="e.g. July 3–6, 2026" {...f('dates')} /></div>
-      <div className="ev-field"><label className="ev-label">Location</label><input className="ev-input" placeholder="e.g. Mojave Desert, CA" {...f('location')} /></div>
+      <div className="ev-field"><label className="ev-label">Dates</label><input className="ev-input" placeholder="e.g. Aug 30 – Sept 7, 2026" {...f('dates')} /></div>
+      <div className="ev-field"><label className="ev-label">Location</label><input className="ev-input" placeholder="e.g. 7:30 & B Plaza, Black Rock City" {...f('location')} /></div>
       <div className="ev-field"><label className="ev-label">Description</label><textarea className="ev-textarea" rows={4} {...f('description')} /></div>
 
       <h3 style={{ marginTop: 32 }}>Access</h3>
@@ -944,7 +918,7 @@ function AdminConfig({ config, updateConfig }) {
           style={{ accentColor: '#C8956C' }}
         />
         <label htmlFor="appOpen" style={{ fontSize: 13, color: '#A88876', cursor: 'pointer' }}>
-          Applications open (uncheck to close RSVP)
+          Applications open
         </label>
       </div>
       <div className="ev-field">
@@ -952,12 +926,9 @@ function AdminConfig({ config, updateConfig }) {
         <input className="ev-input" type="number" {...f('shiftRequirement')} />
       </div>
       <div className="ev-field">
-        <label className="ev-label">Applications Sheet URL (Google Apps Script)</label>
+        <label className="ev-label">Applications Sheet URL (Google Apps Script /exec URL)</label>
         <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('applicationsSheet')} />
-      </div>
-      <div className="ev-field">
-        <label className="ev-label">RSVP Sheet URL (Google Apps Script)</label>
-        <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('rsvpSheet')} />
+        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>All form submissions (new applicants and returning members) will be sent here.</p>
       </div>
 
       <button className="ev-btn ev-btn-primary" onClick={() => updateConfig(form)}>Save changes</button>
@@ -1010,8 +981,16 @@ function AdminShifts({ shifts, updateShifts }) {
 function AdminApplications({ applications }) {
   const exportCsv = () => {
     const rows = [
-      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Emergency', 'Submitted'],
-      ...applications.map(a => [a.type || '', a.name, a.playaName || '', a.email, a.phone, a.emergency, new Date(a.appliedAt).toLocaleString()]),
+      ['Type', 'Name', 'Playa Name', 'Email', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Rideshare', 'Camping With', 'Submitted'],
+      ...applications.map(a => [
+        a.memberType || a.type || '',
+        a.name, a.playaName || '', a.email,
+        a.arrivalDay || '', a.departureDay || '',
+        a.accommodationType || '', a.needsPower ? 'Yes' : 'No',
+        a.duesStatus || '', a.emergency, a.dietary || '',
+        a.rideshare || '', a.campingWith || '',
+        new Date(a.submittedAt || a.appliedAt).toLocaleString(),
+      ]),
     ];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -1031,12 +1010,22 @@ function AdminApplications({ applications }) {
         <div key={a.id} style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 8, padding: 14, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
             <div style={{ fontFamily: 'Cormorant Garamond, serif', fontWeight: 500, fontSize: 19, color: '#FBF0E0' }}>{a.name}</div>
-            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: a.type === 'rsvp' ? '#1A2A10' : '#1A100A', color: a.type === 'rsvp' ? '#6EC87A' : '#C8956C', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{a.type || 'apply'}</span>
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: a.memberType === 'returning' ? '#1A2A10' : '#1A100A', color: a.memberType === 'returning' ? '#6EC87A' : '#C8956C', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{a.memberType || a.type || 'apply'}</span>
           </div>
           {a.playaName && <div style={{ fontSize: 13, color: '#C8956C', marginBottom: 2 }}>"{a.playaName}"</div>}
-          <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email} · {a.phone}</div>
+          <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email}</div>
+          {(a.arrivalDay || a.departureDay) && (
+            <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>
+              {a.arrivalDay && `Arrives: ${a.arrivalDay}`}{a.arrivalDay && a.departureDay && ' · '}{a.departureDay && `Leaves: ${a.departureDay}`}
+            </div>
+          )}
+          {a.accommodationType && (
+            <div style={{ fontSize: 13, color: '#A88876', marginTop: 2 }}>
+              {a.accommodationType === 'tent' ? '⛺ Tent' : '🚐 RV'}{a.needsPower ? ' · Needs power' : ''}{a.duesStatus === 'paid' ? ' · Dues paid' : a.duesStatus === 'will-talk' ? ' · Will talk to lead re: dues' : ''}
+            </div>
+          )}
           <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>Emergency: {a.emergency}</div>
-          <div style={{ fontSize: 12, color: '#6B5749', marginTop: 6 }}>Submitted {new Date(a.appliedAt).toLocaleString()}</div>
+          <div style={{ fontSize: 12, color: '#6B5749', marginTop: 6 }}>Submitted {new Date(a.submittedAt || a.appliedAt).toLocaleString()}</div>
         </div>
       ))}
     </div>
@@ -1147,7 +1136,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, cale
 
   const tabs = [
     { id: 'config', label: 'Event Info' },
-    { id: 'shifts', label: 'Dates & Shifts' },
+    { id: 'shifts', label: 'Shifts' },
     { id: 'packing', label: 'Packing' },
     { id: 'resources', label: 'Resources' },
     { id: 'calendar', label: 'Calendar' },
@@ -1218,10 +1207,6 @@ function AdminLock({ config, onLogin }) {
 }
 
 // ============================================================
-// MAIN APP
-// ============================================================
-
-// ============================================================
 // CAMP AGREEMENTS PAGE
 // ============================================================
 
@@ -1242,17 +1227,32 @@ const CAMP_AGREEMENTS_LIST = [
   "If there is a weather emergency, I will be sure to stay engaged with the camp updates",
 ];
 
-function CampAgreementsPage({ me }) {
+function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   const [checked, setChecked] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const allChecked = CAMP_AGREEMENTS_LIST.every((_, i) => checked[i]);
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+
+  const handleSubmit = async () => {
+    if (!allChecked) return;
+    if (pendingApplication && typeof onApplicationSubmit === 'function') {
+      await onApplicationSubmit(pendingApplication);
+    }
+    setSubmitted(true);
+  };
 
   if (submitted) {
     return (
       <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
-        <h2 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>You're all set!</h2>
-        <p style={{ color: 'var(--ev-muted)' }}>Thank you for reviewing the camp agreements.</p>
+        <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 400, color: '#FBF0E0', marginBottom: '0.75rem' }}>
+          {pendingApplication ? "You're all set!" : "Agreements acknowledged!"}
+        </h2>
+        <p style={{ color: '#A88876', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
+          {pendingApplication
+            ? 'Your application has been submitted and your agreements are on record. See you on the playa!'
+            : 'Thank you for reviewing the camp agreements.'}
+        </p>
       </div>
     );
   }
@@ -1260,20 +1260,27 @@ function CampAgreementsPage({ me }) {
   return (
     <div className="ev-page">
       <h1 className="ev-section-h">Camp Agreements</h1>
+      {pendingApplication && (
+        <div style={{ background: 'rgba(200,149,108,0.08)', border: '1px solid #C8956C', borderRadius: 10, padding: '12px 16px', marginBottom: 24 }}>
+          <p style={{ fontSize: 14, color: '#C8956C', fontWeight: 500 }}>
+            Almost there, {pendingApplication.name}! Check all the boxes below, then hit Submit to complete your application.
+          </p>
+        </div>
+      )}
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--ev-border)' }}>
+        <div style={{ background: 'var(--ev-card,#0F0805)', borderRadius: 10, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #1E100A' }}>
           <p style={{ margin: 0, lineHeight: 1.6 }}>
-            Hello Campers! This year we are incorporating an agreements page. Please read and acknowledge — this will help the camp run smoothly.
+            Hello Campers! This year we are incorporating an agreements page. Please read and acknowledge each item — this will help the camp run smoothly.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
           {CAMP_AGREEMENTS_LIST.map((item, i) => (
-            <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem', background: checked[i] ? 'rgba(139,96,64,0.08)' : 'var(--ev-card)', borderRadius: 8, border: '1px solid ' + (checked[i] ? 'var(--ev-accent)' : 'var(--ev-border)'), transition: 'all 0.15s' }}>
+            <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem', background: checked[i] ? 'rgba(139,96,64,0.08)' : '#0F0805', borderRadius: 8, border: '1px solid ' + (checked[i] ? '#C8956C' : '#1E100A'), transition: 'all 0.15s' }}>
               <input
                 type="checkbox"
                 checked={!!checked[i]}
                 onChange={e => setChecked(c => ({ ...c, [i]: e.target.checked }))}
-                style={{ marginTop: '2px', accentColor: 'var(--ev-accent)', width: 18, height: 18, flexShrink: 0 }}
+                style={{ marginTop: '2px', accentColor: '#C8956C', width: 18, height: 18, flexShrink: 0 }}
               />
               <span style={{ lineHeight: 1.5, fontSize: '0.92rem' }}>{item}</span>
             </label>
@@ -1282,10 +1289,12 @@ function CampAgreementsPage({ me }) {
         <button
           className="ev-btn ev-btn-primary"
           disabled={!allChecked}
-          onClick={() => setSubmitted(true)}
-          style={{ width: '100%', opacity: allChecked ? 1 : 0.5, cursor: allChecked ? 'pointer' : 'not-allowed' }}
+          onClick={handleSubmit}
+          style={{ width: '100%', padding: '14px', fontSize: 15, opacity: allChecked ? 1 : 0.5, cursor: allChecked ? 'pointer' : 'not-allowed' }}
         >
-          {allChecked ? 'Submit' : `Check all boxes to continue (${Object.values(checked).filter(Boolean).length}/${CAMP_AGREEMENTS_LIST.length})`}
+          {allChecked
+            ? (pendingApplication ? 'Submit My Application ✓' : 'Acknowledged ✓')
+            : `Check all boxes to continue (${checkedCount}/${CAMP_AGREEMENTS_LIST.length})`}
         </button>
       </div>
     </div>
@@ -1302,24 +1311,29 @@ function CampNeedsPage() {
       <h1 className="ev-section-h">Camp Needs</h1>
       <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
-          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Items the Camp Needs</h2>
+        <div style={{ background: '#0F0805', borderRadius: 10, padding: '1.5rem', border: '1px solid #1E100A' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: '#C8956C' }}>Items the Camp Needs</h2>
           <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <li>2–3 simple kitchen burners (new)</li>
             <li>Bar mats — to keep the bar safer, especially in weather</li>
+            <li>2 hard rakes</li>
           </ul>
         </div>
 
-        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
-          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Projects to Help the Camp</h2>
-          <p style={{ color: 'var(--ev-muted)', fontSize: '0.92rem', margin: 0 }}>More details coming soon. If you have ideas or want to lead a project, reach out!</p>
+        <div style={{ background: '#0F0805', borderRadius: 10, padding: '1.5rem', border: '1px solid #1E100A' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: '#C8956C' }}>Projects to Help the Camp</h2>
+          <p style={{ color: '#6B5749', fontSize: '0.92rem', margin: 0 }}>More details coming soon. If you have ideas or want to lead a project, reach out!</p>
         </div>
 
-        <div style={{ background: 'var(--ev-card)', borderRadius: 10, padding: '1.5rem', border: '1px solid var(--ev-border)' }}>
-          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--ev-accent)' }}>Sub-Task Lead Roles</h2>
-          <p style={{ marginBottom: '0.75rem', fontSize: '0.92rem', color: 'var(--ev-muted)' }}>The camp could use help in these areas. Interested? Let a camp lead know.</p>
+        <div style={{ background: '#0F0805', borderRadius: 10, padding: '1.5rem', border: '1px solid #1E100A' }}>
+          <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: '#C8956C' }}>Sub-Task Lead Roles</h2>
+          <p style={{ marginBottom: '0.75rem', fontSize: '0.92rem', color: '#A88876' }}>The camp could use help in these areas. Interested? Let a camp lead know.</p>
           <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <li>Water Lead</li>
+            <li>Bike Czar</li>
+            <li>Piano Tuner</li>
+            <li>Extra Wood</li>
+            <li>Trash Lead — to help ensure everyone takes trash out and manages that process</li>
           </ul>
         </div>
 
@@ -1327,6 +1341,10 @@ function CampNeedsPage() {
     </div>
   );
 }
+
+// ============================================================
+// MAIN APP
+// ============================================================
 
 export default function App() {
   const [page, setPage] = useState('home');
@@ -1341,21 +1359,22 @@ export default function App() {
   const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
 
   // Per-device state (localStorage)
-  const [me, setMe] = useState(null);
   const [packingChecks, setPackingChecks] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
 
+  // Pending application (form data waiting for agreements to be signed)
+  const [pendingApplication, setPendingApplication] = useState(null);
+
   useEffect(() => {
     (async () => {
-      const [cfg, sh, pk, rs, ap, cal, mUsr, pcChk] = await Promise.all([
+      const [cfg, sh, pk, rs, ap, cal, pcChk] = await Promise.all([
         load('config', DEFAULT_CONFIG, true),
         load('shifts', DEFAULT_SHIFTS, true),
         load('packing', DEFAULT_PACKING, true),
         load('resources', DEFAULT_RESOURCES, true),
         load('applications', [], true),
         load('calendar', DEFAULT_CALENDAR, true),
-        load('me', null, false),
         load('packingChecks', {}, false),
       ]);
       setConfig(cfg);
@@ -1364,7 +1383,6 @@ export default function App() {
       setResources(rs);
       setApplications(ap);
       setCalendar(cal);
-      setMe(mUsr);
       setPackingChecks(pcChk);
       setLoading(false);
     })();
@@ -1395,10 +1413,38 @@ export default function App() {
     await save('calendar', cal, true);
   };
 
+  // Called when user fills out apply form and clicks "Continue to Agreements"
+  const handleContinueToAgreements = (formData) => {
+    setPendingApplication(formData);
+    setPage('campAgreements');
+  };
+
+  // Called when user finishes agreements — saves application + sends to Google Sheet
+  const handleApplicationSubmit = async (appData) => {
+    const application = {
+      id: newId(),
+      ...appData,
+    };
+    const newApplications = [...applications, application];
+    await save('applications', newApplications, true);
+    setApplications(newApplications);
+
+    // Post to Google Sheet if configured
+    if (config.applicationsSheet) {
+      fetch(config.applicationsSheet, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(application),
+      }).catch(() => {});
+    }
+
+    setPendingApplication(null);
+  };
+
   const NAV_TABS = [
     { id: 'home', label: 'Home' },
-    { id: 'apply', label: 'New Applicants' },
-    { id: 'rsvp', label: 'RSVP' },
+    { id: 'apply', label: 'Apply' },
     { id: 'shifts', label: 'Shifts' },
     { id: 'dates', label: 'Dates' },
     { id: 'resources', label: 'Resources' },
@@ -1456,29 +1502,26 @@ export default function App() {
 
       {page === 'home' && <HomePage config={config} setPage={setPage} />}
       {page === 'apply' && (
-        <ApplyPage
-          config={config} shifts={shifts} setShifts={setShifts}
-          applications={applications} setApplications={setApplications}
-          me={me} setMe={setMe}
+        <UnifiedApplyPage
+          config={config}
+          onContinueToAgreements={handleContinueToAgreements}
         />
       )}
-      {page === 'rsvp' && (
-        <RSVPPage
-          config={config} shifts={shifts} setShifts={setShifts}
-          applications={applications} setApplications={setApplications}
-          me={me} setMe={setMe} setPage={setPage}
-        />
-      )}
-      {page === 'shifts' && <ShiftsPage shifts={shifts} setShifts={setShifts} me={me} />}
+      {page === 'shifts' && <ShiftsPage />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
       {page === 'resources' && <ResourcesPage resources={resources} />}
       {page === 'packing' && (
         <PackingPage
           items={packingItems} checks={packingChecks}
-          setChecks={setPackingChecks} me={me}
+          setChecks={setPackingChecks}
         />
       )}
-      {page === 'campAgreements' && <CampAgreementsPage me={me} />}
+      {page === 'campAgreements' && (
+        <CampAgreementsPage
+          pendingApplication={pendingApplication}
+          onApplicationSubmit={handleApplicationSubmit}
+        />
+      )}
       {page === 'campNeeds' && <CampNeedsPage />}
       {page === 'admin' && (
         isAdmin
