@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { load, save } from './storage';
+import { load, save, saveApplication, loadAllApplications } from './storage';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -661,6 +661,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     const errs = {};
     if (!form.name.trim()) errs.name = 'Required';
     if (!form.email.trim()) errs.email = 'Required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) errs.email = "That doesn't look like a valid email";
     if (!form.emergency.trim()) errs.emergency = 'Required';
     if (!accom) errs.accom = 'Please indicate Tent or RV';
     return errs;
@@ -912,6 +913,12 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 
 const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88/htmlview?gid=1492903072';
 
+// Ride Share sheet. Google refuses to render an /edit URL inside an iframe, so
+// the embed uses the read-only htmlview and the button opens the editable sheet.
+const RIDESHARE_SHEET_ID = '1lDDHilsu5es2H_3In81wK6U4fvkVvtz0d9b4MPCGHR0';
+const RIDESHARE_SHEET_VIEW_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/htmlview?gid=0`;
+const RIDESHARE_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/edit?gid=0#gid=0`;
+
 function ShiftsPage() {
   return (
     <div className="ev-page-wide">
@@ -943,6 +950,46 @@ function ShiftsPage() {
 }
 
 // ============================================================
+// RIDE SHARE PAGE
+// ============================================================
+
+function RideSharePage() {
+  return (
+    <div className="ev-page-wide">
+      <h1 className="ev-section-h">Ride Share</h1>
+      <p className="ev-section-sub">Offering a ride or looking for one? Add yourself to the sheet below so we can pair people up.</p>
+
+      <div style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 20 }}>🚗</span>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <p style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500, marginBottom: 2 }}>Live Ride Share Spreadsheet</p>
+          <p style={{ fontSize: 13, color: '#6B5749' }}>
+            The view below is read-only and updates in real time. To add or edit your own row, open the sheet directly.
+          </p>
+        </div>
+        <a
+          className="ev-btn ev-btn-primary ev-btn-small"
+          href={RIDESHARE_SHEET_EDIT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+        >
+          Open the sheet →
+        </a>
+      </div>
+
+      <iframe
+        src={RIDESHARE_SHEET_VIEW_URL}
+        className="ev-shifts-frame"
+        title="Beverly Grillz Ride Share"
+        frameBorder="0"
+        allowFullScreen
+      />
+    </div>
+  );
+}
+
+// ============================================================
 // RESOURCES PAGE
 // ============================================================
 
@@ -954,22 +1001,44 @@ function ResourcesPage({ resources }) {
       {resources.length === 0 && (
         <p style={{ color: '#6B5749', fontSize: 14 }}>Resources will be posted here before the event.</p>
       )}
-      {resources.map(r => (
-        <a
-          key={r.id}
-          className="ev-resource-card"
-          href={r.url || '#'}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: 'flex', textDecoration: 'none' }}
-        >
-          <div className="ev-resource-info">
-            <h3>{r.name}</h3>
-            {r.description && <p>{r.description}</p>}
-          </div>
-          <div className="ev-resource-kind">{r.kind}</div>
-        </a>
-      ))}
+      {resources.map(r => {
+        // A resource with no real URL is a placeholder. Render it as plainly
+        // unavailable rather than a link that silently does nothing. This is
+        // checked at render time on purpose — resources come from Supabase, so
+        // editing the defaults in code would not fix already-saved entries.
+        const ready = r.url && r.url.trim() && r.url.trim() !== '#';
+        if (!ready) {
+          return (
+            <div
+              key={r.id}
+              className="ev-resource-card"
+              style={{ display: 'flex', opacity: 0.55, cursor: 'default' }}
+            >
+              <div className="ev-resource-info">
+                <h3>{r.name}</h3>
+                <p>{r.description ? `${r.description} — coming soon` : 'Coming soon'}</p>
+              </div>
+              <div className="ev-resource-kind">soon</div>
+            </div>
+          );
+        }
+        return (
+          <a
+            key={r.id}
+            className="ev-resource-card"
+            href={r.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'flex', textDecoration: 'none' }}
+          >
+            <div className="ev-resource-info">
+              <h3>{r.name}</h3>
+              {r.description && <p>{r.description}</p>}
+            </div>
+            <div className="ev-resource-kind">{r.kind}</div>
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -1076,6 +1145,26 @@ function AdminConfig({ config, updateConfig }) {
         <label className="ev-label">Applications Sheet URL (Google Apps Script /exec URL)</label>
         <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('applicationsSheet')} />
         <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>All form submissions (new applicants and returning members) will be sent here.</p>
+        {!String(form.applicationsSheet || '').trim() && (
+          <div style={{ background: 'rgba(190,70,50,0.12)', border: '1px solid #B4503C', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#E0A090', lineHeight: 1.5 }}>
+              <strong>Not set.</strong> Applications are being saved to the camp database, but nothing is reaching the Google Sheet.
+              Paste the Apps Script deployment URL above — it must end in <code>/exec</code> (not <code>/dev</code>) and the deployment access must be set to "Anyone".
+            </p>
+          </div>
+        )}
+        {(() => {
+          const u = String(form.applicationsSheet || '').trim();
+          if (!u) return null;
+          if (u.endsWith('/exec')) return null;
+          return (
+            <div style={{ background: 'rgba(200,149,108,0.10)', border: '1px solid #C8956C', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
+              <p style={{ margin: 0, fontSize: 12, color: '#C8956C', lineHeight: 1.5 }}>
+                This URL does not end in <code>/exec</code>. A <code>/dev</code> URL only works while you are signed in as the script owner, so applicant submissions will be dropped.
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       <button className="ev-btn ev-btn-primary" onClick={() => updateConfig(form)}>Save changes</button>
@@ -1125,7 +1214,7 @@ function AdminShifts({ shifts, updateShifts }) {
 // ADMIN — Applications panel
 // ============================================================
 
-function AdminApplications({ applications }) {
+function AdminApplications({ applications, applicationsError }) {
   const exportCsv = () => {
     const rows = [
       ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Medical Condition', 'Rideshare', 'Camping With', 'Submitted'],
@@ -1151,9 +1240,16 @@ function AdminApplications({ applications }) {
     <div className="ev-admin-section">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ marginBottom: 0, borderBottom: 'none' }}>Applications ({applications.length})</h3>
-        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={exportCsv} disabled={applications.length === 0}>Export CSV</button>
+        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={exportCsv} disabled={applications.length === 0 || applicationsError}>Export CSV</button>
       </div>
-      {applications.length === 0 && <p style={{ color: '#8A7060' }}>No applications yet.</p>}
+      {applicationsError && (
+        <div style={{ background: 'rgba(190,70,50,0.12)', border: '1px solid #B4503C', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#E0A090', lineHeight: 1.5 }}>
+            <strong>Could not load applications.</strong> This list may be incomplete or empty because the database read failed — reload the page before assuming nobody has applied. Do not export CSV from this view.
+          </p>
+        </div>
+      )}
+      {applications.length === 0 && !applicationsError && <p style={{ color: '#8A7060' }}>No applications yet.</p>}
       {applications.map(a => (
         <div key={a.id} style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 8, padding: 14, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -1161,6 +1257,12 @@ function AdminApplications({ applications }) {
             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: a.memberType === 'returning' ? '#1A2A10' : '#1A100A', color: a.memberType === 'returning' ? '#6EC87A' : '#C8956C', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{a.memberType || a.type || 'apply'}</span>
           </div>
           {a.playaName && <div style={{ fontSize: 13, color: '#C8956C', marginBottom: 2 }}>"{a.playaName}"</div>}
+          {a.affirmations && Array.isArray(a.affirmations.items) && (
+            <div style={{ fontSize: 12, color: '#6EC87A', marginBottom: 2 }}>
+              ✓ Affirmed {a.affirmations.items.filter(i => i.checked).length}/{a.affirmations.items.length}
+              {a.affirmations.affirmedAt ? ` · ${new Date(a.affirmations.affirmedAt).toLocaleDateString()}` : ''}
+            </div>
+          )}
           <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email}{a.phone && <span style={{ color: '#A88876', marginLeft: 10 }}>{a.phone}</span>}</div>
           {(a.arrivalDay || a.departureDay) && (
             <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>
@@ -1279,7 +1381,7 @@ function AdminCalendar({ calendar, updateCalendar }) {
 // ADMIN PAGE
 // ============================================================
 
-function AdminPage({ config, shifts, resources, packingItems, applications, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
+function AdminPage({ config, shifts, resources, packingItems, applications, applicationsError, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
   const [tab, setTab] = useState('config');
 
   const tabs = [
@@ -1309,7 +1411,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, cale
       {tab === 'packing' && <AdminPacking items={packingItems} updatePacking={updatePacking} />}
       {tab === 'resources' && <AdminResources resources={resources} updateResources={updateResources} />}
       {tab === 'calendar' && <AdminCalendar calendar={calendar} updateCalendar={updateCalendar} />}
-      {tab === 'applications' && <AdminApplications applications={applications} />}
+      {tab === 'applications' && <AdminApplications applications={applications} applicationsError={applicationsError} />}
     </div>
   );
 }
@@ -1378,13 +1480,44 @@ const CAMP_AGREEMENTS_LIST = [
 function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   const [checked, setChecked] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const allChecked = CAMP_AGREEMENTS_LIST.every((_, i) => checked[i]);
   const checkedCount = Object.values(checked).filter(Boolean).length;
 
+  // Captured before submitting: handleApplicationSubmit clears pendingApplication
+  // on success, so the success screen must not read it to decide what to say.
+  const [wasApplication, setWasApplication] = useState(false);
+
   const handleSubmit = async () => {
-    if (!allChecked) return;
+    if (!allChecked || submitting) return;
+    setSubmitError(null);
+
     if (pendingApplication && typeof onApplicationSubmit === 'function') {
-      await onApplicationSubmit(pendingApplication);
+      setWasApplication(true);
+      setSubmitting(true);
+      // Record what was actually affirmed, alongside the application.
+      const payload = {
+        ...pendingApplication,
+        affirmations: {
+          version: 1,
+          affirmedAt: new Date().toISOString(),
+          items: CAMP_AGREEMENTS_LIST.map((text, i) => ({ text, checked: !!checked[i] })),
+        },
+      };
+      let result;
+      try {
+        result = await onApplicationSubmit(payload);
+      } catch (e) {
+        console.error('Application submit threw', e);
+        result = { ok: false, error: 'Something went wrong while saving. Please try again.' };
+      }
+      setSubmitting(false);
+      // Only claim success if the write actually landed.
+      if (!result || result.ok !== true) {
+        setSubmitError((result && result.error) || 'Your application could not be saved. Please try again.');
+        return;
+      }
     }
     setSubmitted(true);
   };
@@ -1394,10 +1527,10 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
       <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
         <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 400, color: '#FBF0E0', marginBottom: '0.75rem' }}>
-          {pendingApplication ? "You're all set!" : "Affirmations complete!"}
+          {wasApplication ? "You're all set!" : "Affirmations complete!"}
         </h2>
         <p style={{ color: '#A88876', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
-          {pendingApplication
+          {wasApplication
             ? 'Your application has been submitted and your affirmations are on record. See you on the playa!'
             : 'Thank you for reviewing the camp affirmations.'}
         </p>
@@ -1434,15 +1567,22 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
             </label>
           ))}
         </div>
+        {submitError && (
+          <div style={{ background: 'rgba(190,70,50,0.12)', border: '1px solid #B4503C', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 14, color: '#E0A090', lineHeight: 1.5 }}>{submitError}</p>
+          </div>
+        )}
         <button
           className="ev-btn ev-btn-primary"
-          disabled={!allChecked}
+          disabled={!allChecked || submitting}
           onClick={handleSubmit}
-          style={{ width: '100%', padding: '14px', fontSize: 15, opacity: allChecked ? 1 : 0.5, cursor: allChecked ? 'pointer' : 'not-allowed' }}
+          style={{ width: '100%', padding: '14px', fontSize: 15, opacity: allChecked && !submitting ? 1 : 0.5, cursor: allChecked && !submitting ? 'pointer' : 'not-allowed' }}
         >
-          {allChecked
-            ? (pendingApplication ? 'Submit My Application ✓' : 'Acknowledged ✓')
-            : `Check all boxes to continue (${checkedCount}/${CAMP_AGREEMENTS_LIST.length})`}
+          {submitting
+            ? 'Saving…'
+            : allChecked
+              ? (pendingApplication ? (submitError ? 'Try Again' : 'Submit My Application ✓') : 'Acknowledged ✓')
+              : `Check all boxes to continue (${checkedCount}/${CAMP_AGREEMENTS_LIST.length})`}
         </button>
       </div>
     </div>
@@ -1514,15 +1654,17 @@ export default function App() {
   // Pending application (form data waiting for agreements to be signed)
   const [pendingApplication, setPendingApplication] = useState(null);
   const [navIntercept, setNavIntercept] = useState(null); // tab id user tried to go to
+  const [applicationsError, setApplicationsError] = useState(false);
 
   useEffect(() => {
     (async () => {
+      let applicationsFailed = false;
       const [cfg, sh, pk, rs, ap, cal, pcChk] = await Promise.all([
         load('config', DEFAULT_CONFIG, true),
         load('shifts', DEFAULT_SHIFTS, true),
         load('packing', DEFAULT_PACKING, true),
         load('resources', DEFAULT_RESOURCES, true),
-        load('applications', [], true),
+        loadAllApplications().catch(e => { console.error(e); applicationsFailed = true; return []; }),
         load('calendar', DEFAULT_CALENDAR, true),
         load('packingChecks', {}, false),
       ]);
@@ -1531,6 +1673,7 @@ export default function App() {
       setPackingItems(pk);
       setResources(rs);
       setApplications(ap);
+      setApplicationsError(applicationsFailed);
       setCalendar(cal);
       setPackingChecks(pcChk);
       setLoading(false);
@@ -1568,17 +1711,26 @@ export default function App() {
     setPage('campAgreements');
   };
 
-  // Called when user finishes agreements — saves application + sends to Google Sheet
+  // Called when user finishes agreements — saves application + sends to Google Sheet.
+  // Returns { ok: boolean, error?: string }. The caller must NOT show a success
+  // screen unless ok === true.
   const handleApplicationSubmit = async (appData) => {
     const application = {
       id: newId(),
       ...appData,
     };
-    const newApplications = [...applications, application];
-    await save('applications', newApplications, true);
-    setApplications(newApplications);
 
-    // Post to Google Sheet if configured
+    // Written as its own Supabase row — no read-modify-write, so a simultaneous
+    // submit by someone else cannot overwrite this one (or vice versa).
+    const saved = await saveApplication(application);
+    if (!saved) {
+      return { ok: false, error: 'Your application could not be saved. Please try again, or email camp leadership.' };
+    }
+    setApplications(prev => [...prev, application]);
+
+    // Post to Google Sheet if configured.
+    // no-cors means the response is opaque, so a bad URL cannot be detected
+    // here — that is why an unset URL is surfaced in the Admin panel instead.
     if (config.applicationsSheet) {
       fetch(config.applicationsSheet, {
         method: 'POST',
@@ -1586,9 +1738,12 @@ export default function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(application),
       }).catch(() => {});
+    } else {
+      console.warn('config.applicationsSheet is empty — application saved to Supabase only, nothing sent to the Google Sheet.');
     }
 
     setPendingApplication(null);
+    return { ok: true };
   };
 
   const NAV_TABS = [
@@ -1596,11 +1751,12 @@ export default function App() {
     { id: 'apply', label: 'Apply' },
     { id: 'campAgreements', label: 'Affirmations' },
     { id: 'shifts', label: 'Shifts' },
+    { id: 'rideShare', label: 'Ride Share' },
+    { id: 'packing', label: 'Packing' },
     { id: 'dates', label: 'Dates' },
     { id: 'resources', label: 'Resources' },
-    { id: 'packing', label: 'Packing' },
-    { id: 'admin', label: 'Admin' },
     { id: 'campNeeds', label: 'Camp Needs' },
+    { id: 'admin', label: 'Admin' },
   ];
 
   if (loading) {
@@ -1654,8 +1810,19 @@ export default function App() {
           {NAV_TABS.map(t => (
             <button
               key={t.id}
-              className={`ev-nav-tab${page === t.id ? ' active' : ''}`}
-              onClick={() => setPage(t.id)}
+              className={
+                `ev-nav-tab${page === t.id ? ' active' : ''}` +
+                (pendingApplication && t.id === 'campAgreements' && page !== 'campAgreements' ? ' ev-nav-tab-pulse' : '')
+              }
+              onClick={() => {
+                // A half-finished application only lives in memory. Warn before
+                // navigating away from the Affirmations step instead of losing it.
+                if (pendingApplication && t.id !== 'campAgreements' && page === 'campAgreements') {
+                  setNavIntercept(t.id);
+                  return;
+                }
+                setPage(t.id);
+              }}
             >
               {t.label}
             </button>
@@ -1682,6 +1849,7 @@ export default function App() {
         />
       )}
       {page === 'shifts' && <ShiftsPage />}
+      {page === 'rideShare' && <RideSharePage />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
       {page === 'resources' && <ResourcesPage resources={resources} />}
       {page === 'packing' && (
@@ -1701,7 +1869,7 @@ export default function App() {
         isAdmin
           ? <AdminPage
               config={config} shifts={shifts} resources={resources}
-              packingItems={packingItems} applications={applications} calendar={calendar}
+              packingItems={packingItems} applications={applications} applicationsError={applicationsError} calendar={calendar}
               updateConfig={updateConfig} updateShifts={updateShifts}
               updateResources={updateResources} updatePacking={updatePacking}
               updateCalendar={updateCalendar}
