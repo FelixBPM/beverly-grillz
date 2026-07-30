@@ -1668,7 +1668,7 @@ const CAMP_AGREEMENTS_LIST = [
   "I will contribute materially to strike, regardless of departure date",
   "I will pack out all of the belongings that I packed in",
   "I will absolutely not leave my bike or belongings for the truck (for camp gear only)",
-  "I will take bags of trash in my shower (IF I HAVE AN RV)",
+  "I will take a few bags of trash out in my shower (If I have an RV)",
   "I will try to take bags of trash if I have a normal vehicle",
   "I will return tools and drills to Terry's tool corner on the front of the Coronado",
   "I will be careful not to take tools or items that may be in use",
