@@ -652,119 +652,6 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     } else {
       if (col === 'power') setNeedsPower(checked);
       if (col === 'paid') setDuesStatus(checked ? 'paid' : '');
-      if (col === 'will-talk') setDuesStatus(checked🇦' },
-  { code: 'GB', name: 'United Kingdom', dial: '44', flag: '🇬🇧' },
-  { code: 'AU', name: 'Australia',     dial: '61', flag: '🇦🇺' },
-  { code: 'DE', name: 'Germany',       dial: '49', flag: '🇩🇪' },
-  { code: 'FR', name: 'France',        dial: '33', flag: '🇫🇷' },
-  { code: 'NL', name: 'Netherlands',   dial: '31', flag: '🇳🇱' },
-  { code: 'BE', name: 'Belgium',       dial: '32', flag: '🇧🇪' },
-  { code: 'CH', name: 'Switzerland',   dial: '41', flag: '🇨🇭' },
-  { code: 'AT', name: 'Austria',       dial: '43', flag: '🇦🇹' },
-  { code: 'SE', name: 'Sweden',        dial: '46', flag: '🇸🇪' },
-  { code: 'NO', name: 'Norway',        dial: '47', flag: '🇳🇴' },
-  { code: 'DK', name: 'Denmark',       dial: '45', flag: '🇩🇰' },
-  { code: 'FI', name: 'Finland',       dial: '358', flag: '🇫🇮' },
-  { code: 'ES', name: 'Spain',         dial: '34', flag: '🇪🇸' },
-  { code: 'IT', name: 'Italy',         dial: '39', flag: '🇮🇹' },
-  { code: 'PT', name: 'Portugal',      dial: '351', flag: '🇵🇹' },
-  { code: 'IE', name: 'Ireland',       dial: '353', flag: '🇮🇪' },
-  { code: 'NZ', name: 'New Zealand',   dial: '64', flag: '🇳🇿' },
-  { code: 'ZA', name: 'South Africa',  dial: '27', flag: '🇿🇦' },
-  { code: 'IL', name: 'Israel',        dial: '972', flag: '🇮🇱' },
-  { code: 'JP', name: 'Japan',         dial: '81', flag: '🇯🇵' },
-  { code: 'MX', name: 'Mexico',        dial: '52', flag: '🇲🇽' },
-  { code: 'BR', name: 'Brazil',        dial: '55', flag: '🇧🇷' },
-  { code: 'AR', name: 'Argentina',     dial: '54', flag: '🇦🇷' },
-  { code: 'IN', name: 'India',         dial: '91', flag: '🇮🇳' },
-  { code: 'CN', name: 'China',         dial: '86', flag: '🇨🇳' },
-  { code: 'KR', name: 'South Korea',   dial: '82', flag: '🇰🇷' },
-  { code: 'SG', name: 'Singapore',     dial: '65', flag: '🇸🇬' },
-  { code: 'HK', name: 'Hong Kong',     dial: '852', flag: '🇭🇰' },
-  { code: 'OTHER', name: 'Other',      dial: '',   flag: '🌍' },
-];
-
-// Build a longest-match lookup: dialCode → country (prefer US over CA for +1)
-const DIAL_TO_COUNTRY = {};
-[...COUNTRIES].reverse().forEach(c => {
-  if (c.dial) DIAL_TO_COUNTRY[c.dial] = c;
-});
-DIAL_TO_COUNTRY['1'] = COUNTRIES.find(c => c.code === 'US'); // US wins +1
-
-function detectCountryFromInput(raw) {
-  // raw may start with + or just digits
-  const digits = raw.replace(/^\+/, '').replace(/\D/g, '');
-  // Try 3-digit, 2-digit, 1-digit prefixes in that order
-  for (const len of [3, 2, 1]) {
-    const prefix = digits.slice(0, len);
-    if (DIAL_TO_COUNTRY[prefix]) return { country: DIAL_TO_COUNTRY[prefix], rest: digits.slice(len) };
-  }
-  return null;
-}
-
-const ARRIVAL_DAYS = [
-  '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
-  'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
-  'Sept 3', 'Sept 4', 'Sept 5', 'Sept 6', 'Sept 7',
-];
-
-const DEPARTURE_DAYS = [
-  '', 'Aug 30', 'Aug 31', 'Sept 1', 'Sept 2', 'Sept 3', 'Sept 4',
-  'Sept 5 (Man burns)', 'Sept 6 (Temple burns)', 'Sept 7 (BM ends)',
-  'Sept 8', 'Sept 9', 'Sept 10', 'Sept 11', 'Sept 12 or later',
-];
-
-function UnifiedApplyPage({ config, onContinueToAgreements }) {
-  const [memberType, setMemberType] = useState('returning'); // 'new' | 'returning'
-  const [form, setForm] = useState({
-    name: '',
-    playaName: '',
-    email: '',
-    arrivalDay: '',
-    departureDay: '',
-    dietary: '',
-    emergency: '',
-    rideshare: '',
-    campingWith: '',
-  });
-  const [accom, setAccom] = useState('');       // 'tent' | 'rv'
-  const [needsPower, setNeedsPower] = useState(false);
-  const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
-  const [errors, setErrors] = useState({});
-  const [phoneCountry, setPhoneCountry] = useState(COUNTRIES[0]); // US default
-  const [phoneLocal, setPhoneLocal] = useState(''); // digits after country code
-
-  const handlePhoneInput = (val) => {
-    // If user types something starting with + or a known dial prefix, auto-detect country
-    if (val.startsWith('+') || (val.length >= 1 && /^\d/.test(val) && val.length <= 4)) {
-      const detected = detectCountryFromInput(val);
-      if (detected && detected.country.code !== phoneCountry.code) {
-        setPhoneCountry(detected.country);
-        setPhoneLocal(detected.rest);
-        return;
-      }
-    }
-    setPhoneLocal(val);
-  };
-
-  const fullPhone = phoneCountry.dial
-    ? '+' + phoneCountry.dial + ' ' + phoneLocal
-    : phoneLocal;
-
-  const field = (key) => ({
-    value: form[key],
-    onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
-  });
-
-  // Matrix interaction: switching rows resets power/dues
-  const handleMatrix = (type, col, checked) => {
-    if (accom !== type) {
-      setAccom(type);
-      setNeedsPower(col === 'power' ? checked : false);
-      setDuesStatus(col === 'paid' ? (checked ? 'paid' : '') : col === 'will-talk' ? (checked ? 'will-talk' : '') : '');
-    } else {
-      if (col === 'power') setNeedsPower(checked);
-      if (col === 'paid') setDuesStatus(checked ? 'paid' : '');
       if (col === 'will-talk') setDuesStatus(checked ? 'will-talk' : '');
     }
   };
@@ -1598,86 +1485,12 @@ export default function App() {
   const [resources, setResources] = useState(DEFAULT_RESOURCES);
   const [applications, setApplications] = useState([]);
   const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
-
   // Per-device state (localStorage)
   const [packingChecks, setPackingChecks] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-
-  // Pending application (form data waiting for agreements to be signed)
   const [pendingApplication, setPendingApplication] = useState(null);
-  const [navIntercept, setNavIntercept] = useState(null); // tab id user tried to go to
-
-  useEffect(() => {
-    (async () => {
-      const [cfg, sh, pk, rs, ap, cal, pcChk] = await Promise.all([
-        load('config', DEFAULT_CONFIG, true),
-        load('shifts', DEFAULT_SHIFTS, true),
-        load('packing', DEFAULT_PACKING, true),
-        load('resources', DEFAULT_RESOURCES, true),
-        load('applications', [], true),
-        load('calendar', DEFAULT_CALENDAR, true),
-        load('packingChecks', {}, false),
-      ]);
-      setConfig(cfg);
-      setShifts(sh);
-      setPackingItems(pk);
-      setResources(rs);
-      setApplications(ap);
-      setCalendar(cal);
-      setPackingChecks(pcChk);
-      setLoading(false);
-    })();
-  }, []);
-
-  const unlock = async () => {
-    setUnlocked(true);
-  };
-
-  const updateConfig = async (cfg) => {
-    setConfig(cfg);
-    await save('config', cfg, true);
-  };
-  const updateShifts = async (sh) => {
-    setShifts(sh);
-    await save('shifts', sh, true);
-  };
-  const updatePacking = async (pk) => {
-    setPackingItems(pk);
-    await save('packing', pk, true);
-  };
-  const updateResources = async (rs) => {
-    setResources(rs);
-    await save('resources', rs, true);
-  };
-  const updateCalendar = async (cal) => {
-    setCalendar(cal);
-    await save('calendar', cal, true);
-  };
-
-  // Called when user fills out apply form and clicks "Continue to Agreements"
-  const handleContinueToAgreements = (formData) => {
-    setPendingApplication(formData);
-    setPage('campAgreements');
-  };
-
-  // Called when user finishes agreements — saves application + sends to Google Sheet
-  const handleApplicationSubmit = async (appData) => {
-    const application = {
-      id: newId(),
-      ...appData,
-    };
-    const newApplications = [...applications, application];
-    await save('applications', newApplications, true);
-    setApplications(newApplications);
-
-    // Post to Google Sheet if configured
-    if (config.applicationsSheet) {
-      fetch(config.applicationsSheet, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(application),
+  const [navIntercept, setNavIntercept] = useState(null);on),
       }).catch(() => {});
     }
 
@@ -1801,7 +1614,7 @@ export default function App() {
               onLogout={() => setIsAdmin(false)}
             />
           : <AdminLock config={config} onLogin={() => setIsAdmin(true)} />
-      )}
+        )}
     </>
   );
 }
