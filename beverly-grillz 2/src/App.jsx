@@ -62,7 +62,7 @@ const DEFAULT_RESOURCES = [
 ];
 
 const DEFAULT_CALENDAR = [
-  { id: 'c1', date: 'Aug 1 at 5pm', label: 'Shift sign-ups open' },
+  { id: 'c1', date: 'Thu, Aug 6 at 5pm', label: 'Shift sign-ups open' },
   { id: 'c2', date: 'Aug 26', label: 'Early crew starts arriving' },
   { id: 'c3', date: 'Aug 30th', label: 'The Gates Open / Burningman Starts' },
   { id: 'c6', date: 'September 7th', label: 'Burningman Ends!' },
@@ -1000,13 +1000,62 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 
 const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88/htmlview?gid=1492903072';
 
+// Shift signups open Thursday, August 6 2026 at 5pm Eastern.
+// The -04:00 offset is deliberate: Eastern is on daylight time in August, so
+// this is the instant that is 5pm in New York. Anyone loading the page before
+// this moment sees the Coming Soon panel instead of the sheet -- no embed, no
+// link -- and the page swaps itself over without needing a reload.
+const SHIFTS_OPEN_AT = new Date('2026-08-06T17:00:00-04:00');
+const SHIFTS_OPEN_LABEL = 'Thursday, August 6th @ 5pm EST';
+
 // Ride Share sheet. Google refuses to render an /edit URL inside an iframe, so
 // the embed uses the read-only htmlview and the button opens the editable sheet.
 const RIDESHARE_SHEET_ID = '1lDDHilsu5es2H_3In81wK6U4fvkVvtz0d9b4MPCGHR0';
 const RIDESHARE_SHEET_VIEW_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/htmlview?gid=0`;
 const RIDESHARE_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/edit?gid=0#gid=0`;
 
-function ShiftsPage() {
+function ShiftsComingSoon({ config }) {
+  const minShifts = config && config.shiftRequirement ? config.shiftRequirement : 3;
+  return (
+    <div className="ev-page">
+      <h1 className="ev-section-h">Shifts</h1>
+      <div style={{
+        maxWidth: 560, margin: '0 auto', background: '#0F0805', border: '1px solid #2A1810',
+        borderRadius: 12, padding: '2.75rem 2rem', textAlign: 'center',
+      }}>
+        <div style={{
+          fontSize: 12, letterSpacing: '.2em', textTransform: 'uppercase',
+          color: '#C8956C', fontWeight: 600, marginBottom: 18,
+        }}>
+          Coming Soon
+        </div>
+        <h2 style={{
+          fontFamily: 'Cormorant Garamond, serif', fontWeight: 400, fontSize: 27,
+          color: '#FBF0E0', lineHeight: 1.35, marginBottom: 14,
+        }}>
+          Shift signup will open on<br />{SHIFTS_OPEN_LABEL}
+        </h2>
+        <div style={{ width: 40, height: 1, background: '#2A1810', margin: '0 auto 14px' }} />
+        <p style={{ color: '#A88876', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+          Check back then to claim your shifts. Every camper completes at least {minShifts}.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ShiftsPage({ config }) {
+  // Re-check periodically so a page left open before 5pm opens itself.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (now < SHIFTS_OPEN_AT.getTime()) {
+    return <ShiftsComingSoon config={config} />;
+  }
+
   return (
     <div className="ev-page-wide">
       <h1 className="ev-section-h">Shifts</h1>
@@ -1992,7 +2041,7 @@ export default function App() {
           onContinueToAgreements={handleContinueToAgreements}
         />
       )}
-      {page === 'shifts' && <ShiftsPage />}
+      {page === 'shifts' && <ShiftsPage config={config} />}
       {page === 'rideShare' && <RideSharePage />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
       {page === 'resources' && <ResourcesPage resources={resources} />}
