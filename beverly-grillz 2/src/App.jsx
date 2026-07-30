@@ -960,7 +960,6 @@ function RideSharePage() {
       <p className="ev-section-sub">Offering a ride or looking for one? Add yourself to the sheet below so we can pair people up.</p>
 
       <div style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 20 }}>🚗</span>
         <div style={{ flex: 1, minWidth: 220 }}>
           <p style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500, marginBottom: 2 }}>Live Ride Share Spreadsheet</p>
           <p style={{ fontSize: 13, color: '#6B5749' }}>
