@@ -1675,6 +1675,7 @@ const CAMP_AGREEMENTS_LIST = [
   "I will check IDs at the bar",
   "I will try to attend camp meetings when possible",
   "If there is a weather emergency, I will be sure to stay engaged with the camp updates",
+  "I will be very careful about my shower water usage",
 ];
 
 function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
