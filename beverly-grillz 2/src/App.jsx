@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { load, save, saveApplication, loadAllApplications, deleteApplication } from './storage';
 
 // ============================================================
@@ -589,6 +589,30 @@ function detectCountryFromInput(raw) {
   return null;
 }
 
+// E.164 caps a full international number at 15 digits.
+const MAX_PHONE_DIGITS = 15;
+
+// Reduces whatever the user typed or pasted to bare national digits.
+//
+// A leading "1" on a +1 number is the country/trunk code, not part of the
+// national number, so "1 917 319 0900" pasted with US selected becomes
+// "9173190900" rather than an 11-digit string.
+function normalizeNationalDigits(value, country) {
+  let d = String(value == null ? '' : value).replace(/\D/g, '');
+  if (country.dial === '1' && d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+  return d.slice(0, country.dial === '1' ? 10 : MAX_PHONE_DIGITS);
+}
+
+// Live display formatting for +1 numbers only. Other countries have too much
+// variation in national format to guess at, so their digits show as typed.
+function formatNationalPhone(digits, country) {
+  if (!digits) return '';
+  if (country.dial !== '1') return digits;
+  if (digits.length < 4) return digits;
+  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+
 const ARRIVAL_DAYS = [
   '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
   'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
@@ -620,24 +644,76 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
   const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
   const [errors, setErrors] = useState({});
   const [phoneCountry, setPhoneCountry] = useState(COUNTRIES[0]); // US default
-  const [phoneLocal, setPhoneLocal] = useState(''); // digits after country code
+  const [phoneDigits, setPhoneDigits] = useState('');   // national digits only, unformatted
+  const [phoneIntl, setPhoneIntl] = useState(null);     // raw "+..." buffer, until it resolves
+  const phoneInputRef = useRef(null);
+  const phoneCaretRef = useRef(null);                   // digits before the caret, to restore after reformat
 
-  const handlePhoneInput = (val) => {
-    // If user types something starting with + or a known dial prefix, auto-detect country
-    if (val.startsWith('+') || (val.length >= 1 && /^\d/.test(val) && val.length <= 4)) {
-      const detected = detectCountryFromInput(val);
-      if (detected && detected.country.code !== phoneCountry.code) {
+  // Country auto-detection fires ONLY on a leading "+".
+  //
+  // It used to also fire on the first 1-4 bare digits, which meant a national
+  // number was read as a dial code: typing "917..." matched +91 and switched
+  // the country to India, discarding the digits. That made roughly a quarter of
+  // all US area codes impossible to enter. A "+" is the only unambiguous signal
+  // that what follows is a country code.
+  const handlePhoneInput = (e) => {
+    const el = e.target;
+    const raw = el.value;
+    const caretPos = el.selectionStart == null ? raw.length : el.selectionStart;
+
+    if (raw.trim().startsWith('+')) {
+      const detected = detectCountryFromInput(raw);
+      if (detected) {
+        setPhoneIntl(null);
         setPhoneCountry(detected.country);
-        setPhoneLocal(detected.rest);
+        setPhoneDigits(normalizeNationalDigits(detected.rest, detected.country));
+        phoneCaretRef.current = null; // caret to end after an international paste
         return;
       }
+      // Not a dial code we know yet — hold the raw text so the user can keep
+      // typing it, rather than clearing the field under them.
+      setPhoneIntl(raw.trim().slice(0, MAX_PHONE_DIGITS + 1));
+      phoneCaretRef.current = null;
+      return;
     }
-    setPhoneLocal(val);
+
+    setPhoneIntl(null);
+    phoneCaretRef.current = raw.slice(0, caretPos).replace(/\D/g, '').length;
+    setPhoneDigits(normalizeNationalDigits(raw, phoneCountry));
   };
 
-  const fullPhone = phoneCountry.dial
-    ? '+' + phoneCountry.dial + ' ' + phoneLocal
-    : phoneLocal;
+  // Reformatting rewrites the string, so put the caret back where the user left
+  // it — after the same number of digits — instead of jumping to the end.
+  useLayoutEffect(() => {
+    const el = phoneInputRef.current;
+    const target = phoneCaretRef.current;
+    phoneCaretRef.current = null;
+    if (!el || target == null) return;
+    const text = el.value;
+    let pos = text.length;
+    if (target === 0) {
+      pos = 0;
+    } else {
+      let seen = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (/\d/.test(text.charAt(i))) {
+          seen++;
+          if (seen === target) { pos = i + 1; break; }
+        }
+      }
+    }
+    el.setSelectionRange(pos, pos);
+  }, [phoneDigits, phoneCountry, phoneIntl]);
+
+  const phoneDisplay = phoneIntl != null ? phoneIntl : formatNationalPhone(phoneDigits, phoneCountry);
+
+  // Empty stays empty — this used to submit the string "+1 " for anyone who
+  // left the field blank.
+  const fullPhone = phoneIntl != null
+    ? phoneIntl
+    : phoneDigits
+      ? (phoneCountry.dial ? '+' + phoneCountry.dial + ' ' + phoneDigits : phoneDigits)
+      : '';
 
   const field = (key) => ({
     value: form[key],
@@ -745,7 +821,12 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
             value={phoneCountry.code}
             onChange={e => {
               const c = COUNTRIES.find(x => x.code === e.target.value);
-              if (c) setPhoneCountry(c);
+              if (!c) return;
+              setPhoneCountry(c);
+              // Keep whatever they already typed — changing country must never
+              // wipe the number.
+              setPhoneIntl(null);
+              setPhoneDigits(d => normalizeNationalDigits(d, c));
             }}
             style={{
               background: '#1A0E08', border: 'none', borderRight: '1px solid #2A1810',
@@ -765,14 +846,17 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
             </span>
           )}
           <input
+            ref={phoneInputRef}
             style={{ flex: 1, background: 'transparent', border: 'none', color: '#FBF0E0', fontSize: 14, padding: '10px 12px 10px 4px', outline: 'none', minWidth: 0 }}
             type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
             placeholder={phoneCountry.code === 'US' ? '(555) 000-0000' : 'Your number'}
-            value={phoneLocal}
-            onChange={e => handlePhoneInput(e.target.value)}
+            value={phoneDisplay}
+            onChange={handlePhoneInput}
           />
         </div>
-        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>Select your country or type your full number with + country code and it'll auto-detect.</p>
+        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>Pick your country, then just type your number. Pasting a number that starts with + will set the country for you.</p>
       </div>
 
       {/* Arrival / Departure */}
