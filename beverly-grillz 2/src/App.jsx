@@ -613,16 +613,19 @@ function formatNationalPhone(digits, country) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 }
 
+// Weekdays are hardcoded for 2026 (Aug 30 = Sunday, gates open; Sept 7 =
+// Labor Day Monday). If this app is reused for another year, these must be
+// recalculated -- they will not update themselves.
 const ARRIVAL_DAYS = [
-  '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
-  'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
-  'Sept 3', 'Sept 4', 'Sept 5', 'Sept 6', 'Sept 7',
+  '', 'Tue, Aug 25 (super early crew)', 'Wed, Aug 26 (early crew)', 'Thu, Aug 27', 'Fri, Aug 28',
+  'Sat, Aug 29', 'Sun, Aug 30 (gates open)', 'Mon, Aug 31', 'Tue, Sept 1', 'Wed, Sept 2',
+  'Thu, Sept 3', 'Fri, Sept 4', 'Sat, Sept 5', 'Sun, Sept 6', 'Mon, Sept 7',
 ];
 
 const DEPARTURE_DAYS = [
-  '', 'Aug 30', 'Aug 31', 'Sept 1', 'Sept 2', 'Sept 3', 'Sept 4',
-  'Sept 5 (Man burns)', 'Sept 6 (Temple burns)', 'Sept 7 (BM ends)',
-  'Sept 8', 'Sept 9', 'Sept 10', 'Sept 11', 'Sept 12 or later',
+  '', 'Sun, Aug 30', 'Mon, Aug 31', 'Tue, Sept 1', 'Wed, Sept 2', 'Thu, Sept 3', 'Fri, Sept 4',
+  'Sat, Sept 5 (Man burns)', 'Sun, Sept 6 (Temple burns)', 'Mon, Sept 7 (BM ends)',
+  'Tue, Sept 8', 'Wed, Sept 9', 'Thu, Sept 10', 'Fri, Sept 11', 'Sat, Sept 12 or later',
 ];
 
 function UnifiedApplyPage({ config, onContinueToAgreements }) {
