@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { load, save, saveApplication, loadAllApplications } from './storage';
+import { load, save, saveApplication, loadAllApplications, deleteApplication } from './storage';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -1213,7 +1213,20 @@ function AdminShifts({ shifts, updateShifts }) {
 // ADMIN — Applications panel
 // ============================================================
 
-function AdminApplications({ applications, applicationsError }) {
+function AdminApplications({ applications, applicationsError, onDeleteApplication }) {
+  const [confirming, setConfirming] = useState(null); // application id awaiting confirmation
+  const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+
+  const handleDelete = async (a) => {
+    setDeleteError(null);
+    setDeleting(a.id);
+    const ok = await onDeleteApplication(a);
+    setDeleting(null);
+    setConfirming(null);
+    if (!ok) setDeleteError(`Could not delete ${a.name || 'that application'}. It may still be in the database — reload and check.`);
+  };
+
   const exportCsv = () => {
     const rows = [
       ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Medical Condition', 'Rideshare', 'Camping With', 'Submitted'],
@@ -1248,6 +1261,11 @@ function AdminApplications({ applications, applicationsError }) {
           </p>
         </div>
       )}
+      {deleteError && (
+        <div style={{ background: 'rgba(190,70,50,0.12)', border: '1px solid #B4503C', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#E0A090', lineHeight: 1.5 }}>{deleteError}</p>
+        </div>
+      )}
       {applications.length === 0 && !applicationsError && <p style={{ color: '#8A7060' }}>No applications yet.</p>}
       {applications.map(a => (
         <div key={a.id} style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 8, padding: 14, marginBottom: 10 }}>
@@ -1274,7 +1292,31 @@ function AdminApplications({ applications, applicationsError }) {
             </div>
           )}
           <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>Emergency: {a.emergency}</div>
-          <div style={{ fontSize: 12, color: '#6B5749', marginTop: 6 }}>Submitted {new Date(a.submittedAt || a.appliedAt).toLocaleString()}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 10 }}>
+            <span style={{ fontSize: 12, color: '#6B5749' }}>Submitted {new Date(a.submittedAt || a.appliedAt).toLocaleString()}</span>
+            {confirming === a.id ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: '#E0A090' }}>Delete permanently?</span>
+                <button
+                  className="ev-btn ev-btn-small"
+                  disabled={deleting === a.id}
+                  onClick={() => handleDelete(a)}
+                  style={{ background: '#B4503C', color: '#FBF0E0', border: 'none' }}
+                >
+                  {deleting === a.id ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button className="ev-btn ev-btn-ghost ev-btn-small" disabled={deleting === a.id} onClick={() => setConfirming(null)}>Cancel</button>
+              </span>
+            ) : (
+              <button
+                className="ev-btn ev-btn-ghost ev-btn-small"
+                onClick={() => { setDeleteError(null); setConfirming(a.id); }}
+                style={{ flexShrink: 0, color: '#A86050' }}
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -1380,7 +1422,7 @@ function AdminCalendar({ calendar, updateCalendar }) {
 // ADMIN PAGE
 // ============================================================
 
-function AdminPage({ config, shifts, resources, packingItems, applications, applicationsError, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
+function AdminPage({ config, shifts, resources, packingItems, applications, applicationsError, onDeleteApplication, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
   const [tab, setTab] = useState('config');
 
   const tabs = [
@@ -1410,7 +1452,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, appl
       {tab === 'packing' && <AdminPacking items={packingItems} updatePacking={updatePacking} />}
       {tab === 'resources' && <AdminResources resources={resources} updateResources={updateResources} />}
       {tab === 'calendar' && <AdminCalendar calendar={calendar} updateCalendar={updateCalendar} />}
-      {tab === 'applications' && <AdminApplications applications={applications} applicationsError={applicationsError} />}
+      {tab === 'applications' && <AdminApplications applications={applications} applicationsError={applicationsError} onDeleteApplication={onDeleteApplication} />}
     </div>
   );
 }
@@ -1745,6 +1787,22 @@ export default function App() {
     return { ok: true };
   };
 
+  const handleDeleteApplication = async (application) => {
+    const ok = await deleteApplication(application);
+    if (ok) {
+      // Match on id when both have one, otherwise on email + timestamp.
+      // A plain `x.id !== application.id` would drop every legacy record
+      // that has no id at all.
+      const stamp = (v) => v.submittedAt || v.appliedAt || '';
+      const isSame = (x) => x === application
+        || (application.id && x.id ? x.id === application.id
+            : String(x.email || '').trim().toLowerCase() === String(application.email || '').trim().toLowerCase()
+              && stamp(x) === stamp(application));
+      setApplications(prev => prev.filter(x => !isSame(x)));
+    }
+    return ok;
+  };
+
   const NAV_TABS = [
     { id: 'home', label: 'Home' },
     { id: 'apply', label: 'Apply' },
@@ -1868,7 +1926,8 @@ export default function App() {
         isAdmin
           ? <AdminPage
               config={config} shifts={shifts} resources={resources}
-              packingItems={packingItems} applications={applications} applicationsError={applicationsError} calendar={calendar}
+              packingItems={packingItems} applications={applications} applicationsError={applicationsError}
+              onDeleteApplication={handleDeleteApplication} calendar={calendar}
               updateConfig={updateConfig} updateShifts={updateShifts}
               updateResources={updateResources} updatePacking={updatePacking}
               updateCalendar={updateCalendar}

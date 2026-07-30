@@ -88,6 +88,54 @@ export async function saveApplication(application) {
   }
 }
 
+// Deletes one application. Removes the per-row entry and, if the record still
+// lives in the legacy `applications` array, removes it from there too.
+// Returns true only if everything that needed removing was removed.
+export async function deleteApplication(application) {
+  let ok = true
+
+  try {
+    const { error } = await supabase
+      .from('kv_store')
+      .delete()
+      .eq('key', applicationKey(application))
+    if (error) { console.error('Supabase deleteApplication error', error); ok = false }
+  } catch (e) {
+    console.error('Supabase deleteApplication failed', e)
+    ok = false
+  }
+
+  // Legacy array cleanup. Read-modify-write, but this only runs from the
+  // single-admin panel and only touches the retired key.
+  try {
+    const { data, error } = await supabase
+      .from('kv_store')
+      .select('value')
+      .eq('key', 'applications')
+      .maybeSingle()
+    if (error) throw error
+    const legacy = data && Array.isArray(data.value) ? data.value : null
+    if (legacy) {
+      const same = (x) => {
+        if (application.id && x.id) return x.id === application.id
+        const stamp = (v) => v.submittedAt || v.appliedAt || ''
+        return String(x.email || '').trim().toLowerCase() === String(application.email || '').trim().toLowerCase()
+          && stamp(x) === stamp(application)
+      }
+      const next = legacy.filter(x => !same(x))
+      if (next.length !== legacy.length) {
+        const wrote = await save('applications', next, true)
+        if (!wrote) ok = false
+      }
+    }
+  } catch (e) {
+    console.error('Legacy applications cleanup failed', e)
+    ok = false
+  }
+
+  return ok
+}
+
 // Returns every application: the per-row ones plus any still sitting in the
 // legacy `applications` array, deduplicated and sorted oldest first.
 export async function loadAllApplications() {
