@@ -404,6 +404,16 @@ const CSS = `
   .ev-matrix input[type=checkbox] {
     width: 18px; height: 18px; accent-color: #C8956C; cursor: pointer;
   }
+
+  /* Pulse the Affirmations tab when application is pending */
+  @keyframes tab-pulse {
+    0%, 100% { background: rgba(200,149,108,0.15); color: #C8956C; }
+    50% { background: rgba(200,149,108,0.35); color: #FBF0E0; }
+  }
+  .ev-nav-tab-pulse {
+    animation: tab-pulse 1.8s ease-in-out infinite;
+    border-radius: 20px;
+  }
 `;
 
 function InjectCSS() {
@@ -642,6 +652,119 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     } else {
       if (col === 'power') setNeedsPower(checked);
       if (col === 'paid') setDuesStatus(checked ? 'paid' : '');
+      if (col === 'will-talk') setDuesStatus(checked🇦' },
+  { code: 'GB', name: 'United Kingdom', dial: '44', flag: '🇬🇧' },
+  { code: 'AU', name: 'Australia',     dial: '61', flag: '🇦🇺' },
+  { code: 'DE', name: 'Germany',       dial: '49', flag: '🇩🇪' },
+  { code: 'FR', name: 'France',        dial: '33', flag: '🇫🇷' },
+  { code: 'NL', name: 'Netherlands',   dial: '31', flag: '🇳🇱' },
+  { code: 'BE', name: 'Belgium',       dial: '32', flag: '🇧🇪' },
+  { code: 'CH', name: 'Switzerland',   dial: '41', flag: '🇨🇭' },
+  { code: 'AT', name: 'Austria',       dial: '43', flag: '🇦🇹' },
+  { code: 'SE', name: 'Sweden',        dial: '46', flag: '🇸🇪' },
+  { code: 'NO', name: 'Norway',        dial: '47', flag: '🇳🇴' },
+  { code: 'DK', name: 'Denmark',       dial: '45', flag: '🇩🇰' },
+  { code: 'FI', name: 'Finland',       dial: '358', flag: '🇫🇮' },
+  { code: 'ES', name: 'Spain',         dial: '34', flag: '🇪🇸' },
+  { code: 'IT', name: 'Italy',         dial: '39', flag: '🇮🇹' },
+  { code: 'PT', name: 'Portugal',      dial: '351', flag: '🇵🇹' },
+  { code: 'IE', name: 'Ireland',       dial: '353', flag: '🇮🇪' },
+  { code: 'NZ', name: 'New Zealand',   dial: '64', flag: '🇳🇿' },
+  { code: 'ZA', name: 'South Africa',  dial: '27', flag: '🇿🇦' },
+  { code: 'IL', name: 'Israel',        dial: '972', flag: '🇮🇱' },
+  { code: 'JP', name: 'Japan',         dial: '81', flag: '🇯🇵' },
+  { code: 'MX', name: 'Mexico',        dial: '52', flag: '🇲🇽' },
+  { code: 'BR', name: 'Brazil',        dial: '55', flag: '🇧🇷' },
+  { code: 'AR', name: 'Argentina',     dial: '54', flag: '🇦🇷' },
+  { code: 'IN', name: 'India',         dial: '91', flag: '🇮🇳' },
+  { code: 'CN', name: 'China',         dial: '86', flag: '🇨🇳' },
+  { code: 'KR', name: 'South Korea',   dial: '82', flag: '🇰🇷' },
+  { code: 'SG', name: 'Singapore',     dial: '65', flag: '🇸🇬' },
+  { code: 'HK', name: 'Hong Kong',     dial: '852', flag: '🇭🇰' },
+  { code: 'OTHER', name: 'Other',      dial: '',   flag: '🌍' },
+];
+
+// Build a longest-match lookup: dialCode → country (prefer US over CA for +1)
+const DIAL_TO_COUNTRY = {};
+[...COUNTRIES].reverse().forEach(c => {
+  if (c.dial) DIAL_TO_COUNTRY[c.dial] = c;
+});
+DIAL_TO_COUNTRY['1'] = COUNTRIES.find(c => c.code === 'US'); // US wins +1
+
+function detectCountryFromInput(raw) {
+  // raw may start with + or just digits
+  const digits = raw.replace(/^\+/, '').replace(/\D/g, '');
+  // Try 3-digit, 2-digit, 1-digit prefixes in that order
+  for (const len of [3, 2, 1]) {
+    const prefix = digits.slice(0, len);
+    if (DIAL_TO_COUNTRY[prefix]) return { country: DIAL_TO_COUNTRY[prefix], rest: digits.slice(len) };
+  }
+  return null;
+}
+
+const ARRIVAL_DAYS = [
+  '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
+  'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
+  'Sept 3', 'Sept 4', 'Sept 5', 'Sept 6', 'Sept 7',
+];
+
+const DEPARTURE_DAYS = [
+  '', 'Aug 30', 'Aug 31', 'Sept 1', 'Sept 2', 'Sept 3', 'Sept 4',
+  'Sept 5 (Man burns)', 'Sept 6 (Temple burns)', 'Sept 7 (BM ends)',
+  'Sept 8', 'Sept 9', 'Sept 10', 'Sept 11', 'Sept 12 or later',
+];
+
+function UnifiedApplyPage({ config, onContinueToAgreements }) {
+  const [memberType, setMemberType] = useState('returning'); // 'new' | 'returning'
+  const [form, setForm] = useState({
+    name: '',
+    playaName: '',
+    email: '',
+    arrivalDay: '',
+    departureDay: '',
+    dietary: '',
+    emergency: '',
+    rideshare: '',
+    campingWith: '',
+  });
+  const [accom, setAccom] = useState('');       // 'tent' | 'rv'
+  const [needsPower, setNeedsPower] = useState(false);
+  const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
+  const [errors, setErrors] = useState({});
+  const [phoneCountry, setPhoneCountry] = useState(COUNTRIES[0]); // US default
+  const [phoneLocal, setPhoneLocal] = useState(''); // digits after country code
+
+  const handlePhoneInput = (val) => {
+    // If user types something starting with + or a known dial prefix, auto-detect country
+    if (val.startsWith('+') || (val.length >= 1 && /^\d/.test(val) && val.length <= 4)) {
+      const detected = detectCountryFromInput(val);
+      if (detected && detected.country.code !== phoneCountry.code) {
+        setPhoneCountry(detected.country);
+        setPhoneLocal(detected.rest);
+        return;
+      }
+    }
+    setPhoneLocal(val);
+  };
+
+  const fullPhone = phoneCountry.dial
+    ? '+' + phoneCountry.dial + ' ' + phoneLocal
+    : phoneLocal;
+
+  const field = (key) => ({
+    value: form[key],
+    onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
+  });
+
+  // Matrix interaction: switching rows resets power/dues
+  const handleMatrix = (type, col, checked) => {
+    if (accom !== type) {
+      setAccom(type);
+      setNeedsPower(col === 'power' ? checked : false);
+      setDuesStatus(col === 'paid' ? (checked ? 'paid' : '') : col === 'will-talk' ? (checked ? 'will-talk' : '') : '');
+    } else {
+      if (col === 'power') setNeedsPower(checked);
+      if (col === 'paid') setDuesStatus(checked ? 'paid' : '');
       if (col === 'will-talk') setDuesStatus(checked ? 'will-talk' : '');
     }
   };
@@ -683,7 +806,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     <div className="ev-page">
       <div className="ev-form-header">
         <h1>Apply for 2026</h1>
-        <p>Fill out the form below to secure your spot at Beverly Grillz. After submitting you'll review and sign the camp agreements.</p>
+        <p>Fill out the form below to secure your spot at Beverly Grillz. After submitting you'll review and affirm the camp affirmations.</p>
       </div>
 
       {/* New vs Returning */}
@@ -862,11 +985,16 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
           style={{ width: '100%', padding: '14px', fontSize: 15 }}
           onClick={handleContinue}
         >
-          Continue to Camp Agreements →
+          Continue to Camp Affirmations →
         </button>
-        <p style={{ fontSize: 12, color: '#6B5749', textAlign: 'center', marginTop: 10 }}>
-          You'll review and sign the camp agreements on the next step before your application is submitted.
-        </p>
+        <div style={{ marginTop: 14, background: 'rgba(200,149,108,0.08)', border: '1px solid rgba(200,149,108,0.3)', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: '#C8956C', fontWeight: 600, marginBottom: 4 }}>
+            ⚠️ Your information will not be recorded until you complete the Affirmations section.
+          </p>
+          <p style={{ fontSize: 12, color: '#A88876' }}>
+            After clicking Continue, you must check all affirmations and hit Submit to officially apply.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -1364,7 +1492,7 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
         <p style={{ color: '#A88876', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
           {pendingApplication
             ? 'Your application has been submitted and your agreements are on record. See you on the playa!'
-            : 'Thank you for reviewing the camp agreements.'}
+            : 'Thank you for reviewing the camp affirmations.'}
         </p>
       </div>
     );
@@ -1372,7 +1500,7 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
 
   return (
     <div className="ev-page">
-      <h1 className="ev-section-h">Camp Agreements</h1>
+      <h1 className="ev-section-h">Camp Affirmations</h1>
       {pendingApplication && (
         <div style={{ background: 'rgba(200,149,108,0.08)', border: '1px solid #C8956C', borderRadius: 10, padding: '12px 16px', marginBottom: 24 }}>
           <p style={{ fontSize: 14, color: '#C8956C', fontWeight: 500 }}>
@@ -1478,6 +1606,7 @@ export default function App() {
 
   // Pending application (form data waiting for agreements to be signed)
   const [pendingApplication, setPendingApplication] = useState(null);
+  const [navIntercept, setNavIntercept] = useState(null); // tab id user tried to go to
 
   useEffect(() => {
     (async () => {
@@ -1558,13 +1687,13 @@ export default function App() {
   const NAV_TABS = [
     { id: 'home', label: 'Home' },
     { id: 'apply', label: 'Apply' },
+    { id: 'campAgreements', label: 'Affirmations' },
     { id: 'shifts', label: 'Shifts' },
     { id: 'dates', label: 'Dates' },
     { id: 'resources', label: 'Resources' },
     { id: 'packing', label: 'Packing' },
     { id: 'admin', label: 'Admin' },
     { id: 'campNeeds', label: 'Camp Needs' },
-    { id: 'campAgreements', label: 'Agreements' },
   ];
 
   if (loading) {
@@ -1584,9 +1713,34 @@ export default function App() {
     );
   }
 
+  const discardApplication = (goTo) => {
+    setPendingApplication(null);
+    setNavIntercept(null);
+    setPage(goTo);
+  };
+
   return (
     <>
       <InjectCSS />
+      {navIntercept && (
+        <div className="ev-modal-backdrop" onClick={() => setNavIntercept(null)}>
+          <div className="ev-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+            <h2 style={{ fontSize: 22, marginBottom: 10 }}>Application in Progress</h2>
+            <p style={{ marginBottom: 24 }}>
+              You started filling out an application. If you leave now, your information will <strong style={{ color: '#C8956C' }}>not be saved</strong> — you'll need to start over.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button className="ev-btn ev-btn-primary" style={{ width: '100%' }} onClick={() => { setNavIntercept(null); setPage('campAgreements'); }}>
+                Go back and complete Affirmations →
+              </button>
+              <button className="ev-btn ev-btn-ghost" style={{ width: '100%' }} onClick={() => discardApplication(navIntercept)}>
+                Discard my application and leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <nav className="ev-nav">
         <span className="ev-nav-brand" onClick={() => setPage('home')}>{config.eventName}</span>
         <div className="ev-nav-tabs">
