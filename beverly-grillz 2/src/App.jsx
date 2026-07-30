@@ -625,7 +625,7 @@ const ARRIVAL_DAYS = [
 const DEPARTURE_DAYS = [
   '', 'Sun, Aug 30', 'Mon, Aug 31', 'Tue, Sept 1', 'Wed, Sept 2', 'Thu, Sept 3', 'Fri, Sept 4',
   'Sat, Sept 5 (Man burns)', 'Sun, Sept 6 (Temple burns)', 'Mon, Sept 7 (BM ends)',
-  'Tue, Sept 8', 'Wed, Sept 9', 'Thu, Sept 10', 'Fri, Sept 11', 'Sat, Sept 12 or later',
+  'Tue, Sept 8',
 ];
 
 function UnifiedApplyPage({ config, onContinueToAgreements }) {
