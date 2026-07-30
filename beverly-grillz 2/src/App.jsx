@@ -610,6 +610,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     arrivalDay: '',
     departureDay: '',
     dietary: '',
+    medicalCondition: false,
     emergency: '',
     rideshare: '',
     campingWith: '',
@@ -791,8 +792,26 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 
       {/* Dietary */}
       <div className="ev-field">
-        <label className="ev-label">Dietary Restrictions / Allergies</label>
+        <label className="ev-label">Dietary Restrictions / Food Allergies</label>
         <textarea className="ev-textarea" placeholder="Any dietary needs or allergies we should know about?" rows={2} {...field('dietary')} />
+      </div>
+
+      {/* Medical */}
+      <div className="ev-field">
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={form.medicalCondition}
+            onChange={e => setForm(f => ({ ...f, medicalCondition: e.target.checked }))}
+            style={{ accentColor: '#C8956C', marginTop: 2, flexShrink: 0, width: 16, height: 16 }}
+          />
+          <span style={{ fontSize: 14, color: '#FBF0E0', lineHeight: 1.5 }}>
+            Do you have a health condition that our team medical lead should be aware of?
+          </span>
+        </label>
+        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 6, marginLeft: 26 }}>
+          Our medical lead will reach out for a brief, private conversation.
+        </p>
       </div>
 
       {/* Emergency Contact */}
@@ -1109,13 +1128,14 @@ function AdminShifts({ shifts, updateShifts }) {
 function AdminApplications({ applications }) {
   const exportCsv = () => {
     const rows = [
-      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Rideshare', 'Camping With', 'Submitted'],
+      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Medical Condition', 'Rideshare', 'Camping With', 'Submitted'],
       ...applications.map(a => [
         a.memberType || a.type || '',
         a.name, a.playaName || '', a.email, a.phone || '',
         a.arrivalDay || '', a.departureDay || '',
         a.accommodationType || '', a.needsPower ? 'Yes' : 'No',
         a.duesStatus || '', a.emergency, a.dietary || '',
+        a.medicalCondition ? 'Yes' : 'No',
         a.rideshare || '', a.campingWith || '',
         new Date(a.submittedAt || a.appliedAt).toLocaleString(),
       ]),
@@ -1485,12 +1505,86 @@ export default function App() {
   const [resources, setResources] = useState(DEFAULT_RESOURCES);
   const [applications, setApplications] = useState([]);
   const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
+
   // Per-device state (localStorage)
   const [packingChecks, setPackingChecks] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+
+  // Pending application (form data waiting for agreements to be signed)
   const [pendingApplication, setPendingApplication] = useState(null);
-  const [navIntercept, setNavIntercept] = useState(null);on),
+  const [navIntercept, setNavIntercept] = useState(null); // tab id user tried to go to
+
+  useEffect(() => {
+    (async () => {
+      const [cfg, sh, pk, rs, ap, cal, pcChk] = await Promise.all([
+        load('config', DEFAULT_CONFIG, true),
+        load('shifts', DEFAULT_SHIFTS, true),
+        load('packing', DEFAULT_PACKING, true),
+        load('resources', DEFAULT_RESOURCES, true),
+        load('applications', [], true),
+        load('calendar', DEFAULT_CALENDAR, true),
+        load('packingChecks', {}, false),
+      ]);
+      setConfig(cfg);
+      setShifts(sh);
+      setPackingItems(pk);
+      setResources(rs);
+      setApplications(ap);
+      setCalendar(cal);
+      setPackingChecks(pcChk);
+      setLoading(false);
+    })();
+  }, []);
+
+  const unlock = async () => {
+    setUnlocked(true);
+  };
+
+  const updateConfig = async (cfg) => {
+    setConfig(cfg);
+    await save('config', cfg, true);
+  };
+  const updateShifts = async (sh) => {
+    setShifts(sh);
+    await save('shifts', sh, true);
+  };
+  const updatePacking = async (pk) => {
+    setPackingItems(pk);
+    await save('packing', pk, true);
+  };
+  const updateResources = async (rs) => {
+    setResources(rs);
+    await save('resources', rs, true);
+  };
+  const updateCalendar = async (cal) => {
+    setCalendar(cal);
+    await save('calendar', cal, true);
+  };
+
+  // Called when user fills out apply form and clicks "Continue to Agreements"
+  const handleContinueToAgreements = (formData) => {
+    setPendingApplication(formData);
+    setPage('campAgreements');
+  };
+
+  // Called when user finishes agreements — saves application + sends to Google Sheet
+  const handleApplicationSubmit = async (appData) => {
+    const application = {
+      id: newId(),
+      ...appData,
+    };
+    const newApplications = [...applications, application];
+    await save('applications', newApplications, true);
+    setApplications(newApplications);
+
+    // Post to Google Sheet if configured
+    if (config.applicationsSheet) {
+      fetch(config.applicationsSheet, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(application),
       }).catch(() => {});
     }
 
@@ -1614,7 +1708,7 @@ export default function App() {
               onLogout={() => setIsAdmin(false)}
             />
           : <AdminLock config={config} onLogin={() => setIsAdmin(true)} />
-        )}
+      )}
     </>
   );
 }
