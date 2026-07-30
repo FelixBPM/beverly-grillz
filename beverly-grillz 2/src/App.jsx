@@ -1487,11 +1487,11 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
       <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
         <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 400, color: '#FBF0E0', marginBottom: '0.75rem' }}>
-          {pendingApplication ? "You're all set!" : "Agreements acknowledged!"}
+          {pendingApplication ? "You're all set!" : "Affirmations complete!"}
         </h2>
         <p style={{ color: '#A88876', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
           {pendingApplication
-            ? 'Your application has been submitted and your agreements are on record. See you on the playa!'
+            ? 'Your application has been submitted and your affirmations are on record. See you on the playa!'
             : 'Thank you for reviewing the camp affirmations.'}
         </p>
       </div>
@@ -1511,7 +1511,7 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <div style={{ background: 'var(--ev-card,#0F0805)', borderRadius: 10, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #1E100A' }}>
           <p style={{ margin: 0, lineHeight: 1.6 }}>
-            Hello Campers! This year we are incorporating an agreements page. Please read and acknowledge each item — this will help the camp run smoothly.
+            Hello Campers! Please read and affirm each item below — this will help the camp run smoothly and ensure everyone is on the same page.
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
