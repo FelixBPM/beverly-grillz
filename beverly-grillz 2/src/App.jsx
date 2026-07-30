@@ -773,7 +773,6 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     dietary: '',
     medicalCondition: false,
     emergency: '',
-    rideshare: '',
     campingWith: '',
   });
   const [accom, setAccom] = useState('');       // 'tent' | 'rv'
@@ -936,12 +935,6 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
         error={errors.emergencyPhone}
         autoComplete="off"
       />
-
-      {/* Rideshare */}
-      <div className="ev-field">
-        <label className="ev-label">Do you need a ride in or out? Can you offer a ride?</label>
-        <textarea className="ev-textarea" placeholder="Let us know if you need a ride or can offer one. Include pickup/dropoff location if helpful." rows={2} {...field('rideshare')} />
-      </div>
 
       {/* Who camping with */}
       <div className="ev-field">
