@@ -628,24 +628,10 @@ const DEPARTURE_DAYS = [
   'Tue, Sept 8',
 ];
 
-function UnifiedApplyPage({ config, onContinueToAgreements }) {
-  const [memberType, setMemberType] = useState('returning'); // 'new' | 'returning'
-  const [form, setForm] = useState({
-    name: '',
-    playaName: '',
-    email: '',
-    arrivalDay: '',
-    departureDay: '',
-    dietary: '',
-    medicalCondition: false,
-    emergency: '',
-    rideshare: '',
-    campingWith: '',
-  });
-  const [accom, setAccom] = useState('');       // 'tent' | 'rv'
-  const [needsPower, setNeedsPower] = useState(false);
-  const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
-  const [errors, setErrors] = useState({});
+// One phone field, used for both the applicant and their emergency contact.
+// Extracted so the two can never drift apart -- the country-detection bug this
+// fixes was subtle enough that a second copy would eventually reintroduce it.
+function PhoneField({ label, onChange, placeholder, autoComplete, error, required }) {
   const [phoneCountry, setPhoneCountry] = useState(COUNTRIES[0]); // US default
   const [phoneDigits, setPhoneDigits] = useState('');   // national digits only, unformatted
   const [phoneIntl, setPhoneIntl] = useState(null);     // raw "+..." buffer, until it resolves
@@ -718,6 +704,85 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
       ? (phoneCountry.dial ? '+' + phoneCountry.dial + ' ' + phoneDigits : phoneDigits)
       : '';
 
+  // Report the assembled number up to the form.
+  useEffect(() => {
+    if (onChange) onChange(fullPhone);
+  }, [fullPhone]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="ev-field">
+      <label className="ev-label">{label}{required ? ' *' : ''}</label>
+      <div style={{ display: 'flex', gap: 0, borderRadius: 8, border: '1px solid #2A1810', overflow: 'hidden', background: '#0F0805', transition: 'border-color .15s' }}
+        onFocusCapture={e => e.currentTarget.style.borderColor = '#C8956C'}
+        onBlurCapture={e => e.currentTarget.style.borderColor = '#2A1810'}
+      >
+        <select
+          value={phoneCountry.code}
+          onChange={e => {
+            const c = COUNTRIES.find(x => x.code === e.target.value);
+            if (!c) return;
+            setPhoneCountry(c);
+            // Keep whatever they already typed -- changing country must never
+            // wipe the number.
+            setPhoneIntl(null);
+            setPhoneDigits(d => normalizeNationalDigits(d, c));
+          }}
+          style={{
+            background: '#1A0E08', border: 'none', borderRight: '1px solid #2A1810',
+            color: '#FBF0E0', fontSize: 14, padding: '10px 8px', cursor: 'pointer',
+            outline: 'none', flexShrink: 0, maxWidth: 180,
+          }}
+        >
+          {COUNTRIES.map(c => (
+            <option key={c.code} value={c.code}>
+              {c.flag} {c.name}{c.dial ? ` (+${c.dial})` : ''}
+            </option>
+          ))}
+        </select>
+        {phoneCountry.dial && (
+          <span style={{ padding: '10px 8px 10px 10px', color: '#C8956C', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            +{phoneCountry.dial}
+          </span>
+        )}
+        <input
+          ref={phoneInputRef}
+          style={{ flex: 1, background: 'transparent', border: 'none', color: '#FBF0E0', fontSize: 14, padding: '10px 12px 10px 4px', outline: 'none', minWidth: 0 }}
+          type="tel"
+          inputMode="tel"
+          autoComplete={autoComplete || 'tel-national'}
+          placeholder={placeholder || (phoneCountry.code === 'US' ? '(555) 000-0000' : 'Your number')}
+          value={phoneDisplay}
+          onChange={handlePhoneInput}
+        />
+      </div>
+      {error
+        ? <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{error}</p>
+        : <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>Pick your country, then just type your number. Pasting a number that starts with + will set the country for you.</p>}
+    </div>
+  );
+}
+
+function UnifiedApplyPage({ config, onContinueToAgreements }) {
+  const [memberType, setMemberType] = useState('returning'); // 'new' | 'returning'
+  const [form, setForm] = useState({
+    name: '',
+    playaName: '',
+    email: '',
+    arrivalDay: '',
+    departureDay: '',
+    dietary: '',
+    medicalCondition: false,
+    emergency: '',
+    rideshare: '',
+    campingWith: '',
+  });
+  const [accom, setAccom] = useState('');       // 'tent' | 'rv'
+  const [needsPower, setNeedsPower] = useState(false);
+  const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
+  const [errors, setErrors] = useState({});
+  const [phone, setPhone] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
+
   const field = (key) => ({
     value: form[key],
     onChange: e => setForm(f => ({ ...f, [key]: e.target.value })),
@@ -742,6 +807,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     if (!form.email.trim()) errs.email = 'Required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) errs.email = "That doesn't look like a valid email";
     if (!form.emergency.trim()) errs.emergency = 'Required';
+    if (!emergencyPhone.trim()) errs.emergencyPhone = 'Required';
     if (!accom) errs.accom = 'Please indicate Tent or RV';
     return errs;
   };
@@ -752,7 +818,8 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     onContinueToAgreements({
       memberType,
       ...form,
-      phone: fullPhone,
+      phone,
+      emergencyPhone,
       accommodationType: accom,
       needsPower,
       duesStatus,
@@ -813,54 +880,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
         {errors.email && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
       </div>
 
-      {/* Phone */}
-      <div className="ev-field">
-        <label className="ev-label">Phone Number</label>
-        <div style={{ display: 'flex', gap: 0, borderRadius: 8, border: '1px solid #2A1810', overflow: 'hidden', background: '#0F0805', transition: 'border-color .15s' }}
-          onFocusCapture={e => e.currentTarget.style.borderColor = '#C8956C'}
-          onBlurCapture={e => e.currentTarget.style.borderColor = '#2A1810'}
-        >
-          <select
-            value={phoneCountry.code}
-            onChange={e => {
-              const c = COUNTRIES.find(x => x.code === e.target.value);
-              if (!c) return;
-              setPhoneCountry(c);
-              // Keep whatever they already typed — changing country must never
-              // wipe the number.
-              setPhoneIntl(null);
-              setPhoneDigits(d => normalizeNationalDigits(d, c));
-            }}
-            style={{
-              background: '#1A0E08', border: 'none', borderRight: '1px solid #2A1810',
-              color: '#FBF0E0', fontSize: 14, padding: '10px 8px', cursor: 'pointer',
-              outline: 'none', flexShrink: 0, maxWidth: 180,
-            }}
-          >
-            {COUNTRIES.map(c => (
-              <option key={c.code} value={c.code}>
-                {c.flag} {c.name}{c.dial ? ` (+${c.dial})` : ''}
-              </option>
-            ))}
-          </select>
-          {phoneCountry.dial && (
-            <span style={{ padding: '10px 8px 10px 10px', color: '#C8956C', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-              +{phoneCountry.dial}
-            </span>
-          )}
-          <input
-            ref={phoneInputRef}
-            style={{ flex: 1, background: 'transparent', border: 'none', color: '#FBF0E0', fontSize: 14, padding: '10px 12px 10px 4px', outline: 'none', minWidth: 0 }}
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel-national"
-            placeholder={phoneCountry.code === 'US' ? '(555) 000-0000' : 'Your number'}
-            value={phoneDisplay}
-            onChange={handlePhoneInput}
-          />
-        </div>
-        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>Pick your country, then just type your number. Pasting a number that starts with + will set the country for you.</p>
-      </div>
+      <PhoneField label="Phone Number" onChange={setPhone} error={errors.phone} />
 
       {/* Arrival / Departure */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -905,9 +925,17 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
       {/* Emergency Contact */}
       <div className="ev-field">
         <label className="ev-label">Emergency Contact *</label>
-        <input className="ev-input" placeholder="Name & phone number" {...field('emergency')} />
+        <input className="ev-input" placeholder="Name & relationship to you" {...field('emergency')} />
         {errors.emergency && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.emergency}</p>}
       </div>
+      <PhoneField
+        label="Emergency Contact Phone"
+        onChange={setEmergencyPhone}
+        placeholder="Their number"
+        required
+        error={errors.emergencyPhone}
+        autoComplete="off"
+      />
 
       {/* Rideshare */}
       <div className="ev-field">
@@ -1365,13 +1393,13 @@ function AdminApplications({ applications, applicationsError, onDeleteApplicatio
 
   const exportCsv = () => {
     const rows = [
-      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Medical Condition', 'Rideshare', 'Camping With', 'Submitted'],
+      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Emergency Phone', 'Dietary', 'Medical Condition', 'Rideshare', 'Camping With', 'Submitted'],
       ...applications.map(a => [
         a.memberType || a.type || '',
         a.name, a.playaName || '', a.email, a.phone || '',
         a.arrivalDay || '', a.departureDay || '',
         a.accommodationType || '', a.needsPower ? 'Yes' : 'No',
-        a.duesStatus || '', a.emergency, a.dietary || '',
+        a.duesStatus || '', a.emergency, a.emergencyPhone || '', a.dietary || '',
         a.medicalCondition ? 'Yes' : 'No',
         a.rideshare || '', a.campingWith || '',
         new Date(a.submittedAt || a.appliedAt).toLocaleString(),
@@ -1427,7 +1455,9 @@ function AdminApplications({ applications, applicationsError, onDeleteApplicatio
               {a.accommodationType === 'tent' ? '⛺ Tent' : '🚐 RV'}{a.needsPower ? ' · Needs power' : ''}{a.duesStatus === 'paid' ? ' · Dues paid' : a.duesStatus === 'will-talk' ? ' · Will talk to lead re: dues' : ''}
             </div>
           )}
-          <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>Emergency: {a.emergency}</div>
+          <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>
+            Emergency: {a.emergency}{a.emergencyPhone ? <span style={{ color: '#C8956C', marginLeft: 8 }}>{a.emergencyPhone}</span> : null}
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 10 }}>
             <span style={{ fontSize: 12, color: '#6B5749' }}>Submitted {new Date(a.submittedAt || a.appliedAt).toLocaleString()}</span>
             {confirming === a.id ? (
