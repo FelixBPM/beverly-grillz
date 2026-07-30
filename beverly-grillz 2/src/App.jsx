@@ -527,6 +527,58 @@ function HomePage({ config, setPage }) {
 // UNIFIED APPLY PAGE (new applicants + returning members)
 // ============================================================
 
+const COUNTRIES = [
+  { code: 'US', name: 'United States', dial: '1', flag: '🇺🇸' },
+  { code: 'CA', name: 'Canada',        dial: '1', flag: '🇨🇦' },
+  { code: 'GB', name: 'United Kingdom', dial: '44', flag: '🇬🇧' },
+  { code: 'AU', name: 'Australia',     dial: '61', flag: '🇦🇺' },
+  { code: 'DE', name: 'Germany',       dial: '49', flag: '🇩🇪' },
+  { code: 'FR', name: 'France',        dial: '33', flag: '🇫🇷' },
+  { code: 'NL', name: 'Netherlands',   dial: '31', flag: '🇳🇱' },
+  { code: 'BE', name: 'Belgium',       dial: '32', flag: '🇧🇪' },
+  { code: 'CH', name: 'Switzerland',   dial: '41', flag: '🇨🇭' },
+  { code: 'AT', name: 'Austria',       dial: '43', flag: '🇦🇹' },
+  { code: 'SE', name: 'Sweden',        dial: '46', flag: '🇸🇪' },
+  { code: 'NO', name: 'Norway',        dial: '47', flag: '🇳🇴' },
+  { code: 'DK', name: 'Denmark',       dial: '45', flag: '🇩🇰' },
+  { code: 'FI', name: 'Finland',       dial: '358', flag: '🇫🇮' },
+  { code: 'ES', name: 'Spain',         dial: '34', flag: '🇪🇸' },
+  { code: 'IT', name: 'Italy',         dial: '39', flag: '🇮🇹' },
+  { code: 'PT', name: 'Portugal',      dial: '351', flag: '🇵🇹' },
+  { code: 'IE', name: 'Ireland',       dial: '353', flag: '🇮🇪' },
+  { code: 'NZ', name: 'New Zealand',   dial: '64', flag: '🇳🇿' },
+  { code: 'ZA', name: 'South Africa',  dial: '27', flag: '🇿🇦' },
+  { code: 'IL', name: 'Israel',        dial: '972', flag: '🇮🇱' },
+  { code: 'JP', name: 'Japan',         dial: '81', flag: '🇯🇵' },
+  { code: 'MX', name: 'Mexico',        dial: '52', flag: '🇲🇽' },
+  { code: 'BR', name: 'Brazil',        dial: '55', flag: '🇧🇷' },
+  { code: 'AR', name: 'Argentina',     dial: '54', flag: '🇦🇷' },
+  { code: 'IN', name: 'India',         dial: '91', flag: '🇮🇳' },
+  { code: 'CN', name: 'China',         dial: '86', flag: '🇨🇳' },
+  { code: 'KR', name: 'South Korea',   dial: '82', flag: '🇰🇷' },
+  { code: 'SG', name: 'Singapore',     dial: '65', flag: '🇸🇬' },
+  { code: 'HK', name: 'Hong Kong',     dial: '852', flag: '🇭🇰' },
+  { code: 'OTHER', name: 'Other',      dial: '',   flag: '🌍' },
+];
+
+// Build a longest-match lookup: dialCode → country (prefer US over CA for +1)
+const DIAL_TO_COUNTRY = {};
+[...COUNTRIES].reverse().forEach(c => {
+  if (c.dial) DIAL_TO_COUNTRY[c.dial] = c;
+});
+DIAL_TO_COUNTRY['1'] = COUNTRIES.find(c => c.code === 'US'); // US wins +1
+
+function detectCountryFromInput(raw) {
+  // raw may start with + or just digits
+  const digits = raw.replace(/^\+/, '').replace(/\D/g, '');
+  // Try 3-digit, 2-digit, 1-digit prefixes in that order
+  for (const len of [3, 2, 1]) {
+    const prefix = digits.slice(0, len);
+    if (DIAL_TO_COUNTRY[prefix]) return { country: DIAL_TO_COUNTRY[prefix], rest: digits.slice(len) };
+  }
+  return null;
+}
+
 const ARRIVAL_DAYS = [
   '', 'Aug 25 (super early crew)', 'Aug 26 (early crew)', 'Aug 27', 'Aug 28',
   'Aug 29', 'Aug 30 (gates open)', 'Aug 31', 'Sept 1', 'Sept 2',
@@ -556,6 +608,25 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
   const [needsPower, setNeedsPower] = useState(false);
   const [duesStatus, setDuesStatus] = useState(''); // 'paid' | 'will-talk'
   const [errors, setErrors] = useState({});
+  const [phoneCountry, setPhoneCountry] = useState(COUNTRIES[0]); // US default
+  const [phoneLocal, setPhoneLocal] = useState(''); // digits after country code
+
+  const handlePhoneInput = (val) => {
+    // If user types something starting with + or a known dial prefix, auto-detect country
+    if (val.startsWith('+') || (val.length >= 1 && /^\d/.test(val) && val.length <= 4)) {
+      const detected = detectCountryFromInput(val);
+      if (detected && detected.country.code !== phoneCountry.code) {
+        setPhoneCountry(detected.country);
+        setPhoneLocal(detected.rest);
+        return;
+      }
+    }
+    setPhoneLocal(val);
+  };
+
+  const fullPhone = phoneCountry.dial
+    ? '+' + phoneCountry.dial + ' ' + phoneLocal
+    : phoneLocal;
 
   const field = (key) => ({
     value: form[key],
@@ -590,6 +661,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
     onContinueToAgreements({
       memberType,
       ...form,
+      phone: fullPhone,
       accommodationType: accom,
       needsPower,
       duesStatus,
@@ -648,6 +720,47 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
         <label className="ev-label">Email *</label>
         <input className="ev-input" type="email" placeholder="you@example.com" {...field('email')} />
         {errors.email && <p style={{ color: '#8B3020', fontSize: 12, marginTop: 4 }}>{errors.email}</p>}
+      </div>
+
+      {/* Phone */}
+      <div className="ev-field">
+        <label className="ev-label">Phone Number</label>
+        <div style={{ display: 'flex', gap: 0, borderRadius: 8, border: '1px solid #2A1810', overflow: 'hidden', background: '#0F0805', transition: 'border-color .15s' }}
+          onFocusCapture={e => e.currentTarget.style.borderColor = '#C8956C'}
+          onBlurCapture={e => e.currentTarget.style.borderColor = '#2A1810'}
+        >
+          <select
+            value={phoneCountry.code}
+            onChange={e => {
+              const c = COUNTRIES.find(x => x.code === e.target.value);
+              if (c) setPhoneCountry(c);
+            }}
+            style={{
+              background: '#1A0E08', border: 'none', borderRight: '1px solid #2A1810',
+              color: '#FBF0E0', fontSize: 14, padding: '10px 8px', cursor: 'pointer',
+              outline: 'none', flexShrink: 0, maxWidth: 180,
+            }}
+          >
+            {COUNTRIES.map(c => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.name}{c.dial ? ` (+${c.dial})` : ''}
+              </option>
+            ))}
+          </select>
+          {phoneCountry.dial && (
+            <span style={{ padding: '10px 8px 10px 10px', color: '#C8956C', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              +{phoneCountry.dial}
+            </span>
+          )}
+          <input
+            style={{ flex: 1, background: 'transparent', border: 'none', color: '#FBF0E0', fontSize: 14, padding: '10px 12px 10px 4px', outline: 'none', minWidth: 0 }}
+            type="tel"
+            placeholder={phoneCountry.code === 'US' ? '(555) 000-0000' : 'Your number'}
+            value={phoneLocal}
+            onChange={e => handlePhoneInput(e.target.value)}
+          />
+        </div>
+        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>Select your country or type your full number with + country code and it'll auto-detect.</p>
       </div>
 
       {/* Arrival / Departure */}
@@ -763,7 +876,7 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 // SHIFTS PAGE — Google Sheet embed
 // ============================================================
 
-const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1H4MEzoPnO7iqbYyBIZAHsDTlE-tjyIe-/htmlview?gid=268906453';
+const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88/htmlview?gid=1492903072';
 
 function ShiftsPage() {
   return (
@@ -981,10 +1094,10 @@ function AdminShifts({ shifts, updateShifts }) {
 function AdminApplications({ applications }) {
   const exportCsv = () => {
     const rows = [
-      ['Type', 'Name', 'Playa Name', 'Email', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Rideshare', 'Camping With', 'Submitted'],
+      ['Type', 'Name', 'Playa Name', 'Email', 'Phone', 'Arrival', 'Departure', 'Accommodation', 'Power Needed', 'Dues Status', 'Emergency', 'Dietary', 'Rideshare', 'Camping With', 'Submitted'],
       ...applications.map(a => [
         a.memberType || a.type || '',
-        a.name, a.playaName || '', a.email,
+        a.name, a.playaName || '', a.email, a.phone || '',
         a.arrivalDay || '', a.departureDay || '',
         a.accommodationType || '', a.needsPower ? 'Yes' : 'No',
         a.duesStatus || '', a.emergency, a.dietary || '',
@@ -1013,7 +1126,7 @@ function AdminApplications({ applications }) {
             <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: a.memberType === 'returning' ? '#1A2A10' : '#1A100A', color: a.memberType === 'returning' ? '#6EC87A' : '#C8956C', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>{a.memberType || a.type || 'apply'}</span>
           </div>
           {a.playaName && <div style={{ fontSize: 13, color: '#C8956C', marginBottom: 2 }}>"{a.playaName}"</div>}
-          <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email}</div>
+          <div style={{ fontSize: 14, color: '#C8956C' }}>{a.email}{a.phone && <span style={{ color: '#A88876', marginLeft: 10 }}>{a.phone}</span>}</div>
           {(a.arrivalDay || a.departureDay) && (
             <div style={{ fontSize: 13, color: '#A88876', marginTop: 4 }}>
               {a.arrivalDay && `Arrives: ${a.arrivalDay}`}{a.arrivalDay && a.departureDay && ' · '}{a.departureDay && `Leaves: ${a.departureDay}`}
