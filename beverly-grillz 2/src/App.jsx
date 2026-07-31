@@ -2182,7 +2182,7 @@ function CampNeedsPage() {
         <div style={{ background: '#0F0805', borderRadius: 10, padding: '1.5rem', border: '1px solid #1E100A' }}>
           <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: '#C8956C' }}>Items the Camp Needs</h2>
           <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <li>2–3 simple kitchen burners (new)</li>
+            <li>2–3 simple kitchen burners</li>
             <li>Bar mats — to keep the bar safer, especially in weather</li>
             <li>2 hard rakes</li>
           </ul>
