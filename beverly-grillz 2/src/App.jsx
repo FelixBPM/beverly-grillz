@@ -530,6 +530,73 @@ const CSS = `
     .ev-flyer { display: none; }
   }
 
+  /* ---- Moonwalking giraffe, bottom of the Dates page ----
+     He faces right but travels left, which is what sells the moonwalk. The
+     legs run a diagonal gait so it reads as walking forward while sliding
+     backward. The track is the full width of the strip and he sits at its
+     left edge, so these percentages are strip-widths -- stopping at -9%
+     means he exits the left just as the loop restarts. */
+  .ev-moonwalk-strip {
+    position: relative;
+    height: 54px;
+    overflow: hidden;
+    color: #C8956C;
+    /* Full-bleed out of the 720px content column so he crosses the whole
+       black band, and pulled down into .ev-page's 80px bottom padding so he
+       walks along the very bottom edge of it. */
+    width: 100vw;
+    margin: 28px 0 -62px calc(50% - 50vw);
+  }
+  .ev-moonwalk-track {
+    position: absolute;
+    inset: 0;
+    animation: ev-mw-travel 7s linear infinite;
+  }
+  @keyframes ev-mw-travel {
+    from { transform: translateX(101%); }
+    to   { transform: translateX(-9%); }
+  }
+  .ev-moonwalk-body {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    display: inline-block;
+    transform-origin: bottom center;
+    animation: ev-mw-bob .52s ease-in-out infinite;
+  }
+  @keyframes ev-mw-bob {
+    0%, 100% { transform: translateY(0) rotate(-7deg); }
+    50%      { transform: translateY(-3px) rotate(-5deg); }
+  }
+  .ev-moonwalk-body .ev-leg { transform-box: view-box; }
+  .ev-moonwalk-body .ev-leg-a { transform-origin: 67px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-b { transform-origin: 76px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-c { transform-origin: 24px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
+  @keyframes ev-mw-legfwd  { 0%, 100% { transform: rotate(19deg); }  50% { transform: rotate(-15deg); } }
+  @keyframes ev-mw-legback { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(19deg); } }
+
+  /* ---- Music bar ---- */
+  .ev-music-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 80;
+    background: #0B0503; border-top: 1px solid #2A1810;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, .5);
+  }
+  .ev-music-bar iframe { flex: 1; border: 0; min-width: 0; }
+  .ev-music-close {
+    flex-shrink: 0; background: transparent; border: 1px solid #2A1810;
+    color: #A88876; border-radius: 6px; cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 6px 9px;
+  }
+  .ev-music-close:hover { color: #C8956C; border-color: #C8956C; }
+  body.ev-has-music { padding-bottom: 84px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ev-moonwalk-strip { display: none; }
+  }
+
   .ev-essential-badge {
     display: inline-block; flex-shrink: 0;
     font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
@@ -1736,6 +1803,14 @@ function DatesPage({ calendar }) {
           </div>
         );
       })}
+
+      <div className="ev-moonwalk-strip" aria-hidden="true">
+        <span className="ev-moonwalk-track">
+          <span className="ev-moonwalk-body">
+            <Giraffe size={38} />
+          </span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -2381,6 +2456,77 @@ function CampNeedsPage() {
 }
 
 // ============================================================
+// MUSIC BAR
+// ============================================================
+// A SoundCloud player pinned to the bottom of every page once you're past the
+// lock screen. It is rendered from App's root so it never unmounts when the
+// page changes -- if it were rendered per page, the iframe would reload and
+// the track would restart on every nav click.
+//
+// Autoplay: browsers only allow a cross-origin iframe to start audio when the
+// page already has user activation, which the Enter click on the lock screen
+// provides. `allow="autoplay"` passes that activation into the iframe. iOS
+// Safari ignores it, so the widget's own play button is left visible.
+
+const MUSIC_TRACK_URL = 'https://soundcloud.com/coronado_collective/102223-violet-ride-flow';
+const MUSIC_DISMISS_KEY = 'ev-music-dismissed';
+
+function musicEmbedSrc() {
+  const params = new URLSearchParams({
+    url: MUSIC_TRACK_URL,
+    color: '#c8956c',
+    auto_play: 'true',
+    hide_related: 'true',
+    show_comments: 'false',
+    show_user: 'true',
+    show_reposts: 'false',
+    show_teaser: 'false',
+    visual: 'false',
+  });
+  return `https://w.soundcloud.com/player/?${params.toString()}`;
+}
+
+function MusicBar() {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(MUSIC_DISMISS_KEY) === '1'; } catch (e) { return false; }
+  });
+
+  // The bar floats over the bottom of the page, so the document needs room
+  // underneath it or the last row of any page sits behind it.
+  useEffect(() => {
+    if (dismissed) return undefined;
+    document.body.classList.add('ev-has-music');
+    return () => document.body.classList.remove('ev-has-music');
+  }, [dismissed]);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="ev-music-bar">
+      <iframe
+        title="Beverly Grillz camp track"
+        src={musicEmbedSrc()}
+        height="66"
+        scrolling="no"
+        frameBorder="no"
+        allow="autoplay"
+      />
+      <button
+        className="ev-music-close"
+        title="Hide the music player"
+        aria-label="Hide the music player"
+        onClick={() => {
+          setDismissed(true);
+          try { localStorage.setItem(MUSIC_DISMISS_KEY, '1'); } catch (e) {}
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 
@@ -2644,6 +2790,8 @@ export default function App() {
             />
           : <AdminLock config={config} onLogin={() => setIsAdmin(true)} />
       )}
+
+      <MusicBar />
     </>
   );
 }
