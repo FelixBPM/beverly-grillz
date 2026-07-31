@@ -345,7 +345,29 @@ const CSS = `
   @keyframes ev-splay-c { 0% { transform: rotate(0deg); } 25% { transform: rotate(-36deg); } 60% { transform: rotate(-26deg); } 100% { transform: rotate(-40deg); } }
   @keyframes ev-splay-d { 0% { transform: rotate(0deg); } 25% { transform: rotate(-25deg); } 60% { transform: rotate(-17deg); } 100% { transform: rotate(-29deg); } }
 
-  /* The button becomes the hole he falls into. */
+  /* The Apply button stays orange and just loses its label, then darkens in
+     step with the fall -- orange, to burnt orange, to the page background --
+     so it has become a hole in the page exactly as he drops through it.
+     Timed to match ev-fall-through (1.4s). */
+  @keyframes ev-btn-swallow {
+    0%   { background: linear-gradient(135deg, #D4894E, #C06830); box-shadow: none; }
+    18%  { background: linear-gradient(135deg, #D4894E, #C06830); box-shadow: none; }
+    45%  { background: linear-gradient(135deg, #8A5228, #6B3C18); box-shadow: inset 0 6px 14px rgba(0, 0, 0, .45); }
+    70%  { background: linear-gradient(135deg, #4A2A10, #331B0A); box-shadow: inset 0 9px 20px rgba(0, 0, 0, .7); }
+    100% { background: #100804; box-shadow: inset 0 12px 26px rgba(0, 0, 0, .9); }
+  }
+  .ev-btn-swallow {
+    color: transparent !important;
+    border-color: transparent !important;
+    animation: ev-btn-swallow 1.4s ease-in forwards;
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ev-btn-swallow { animation: none; }
+  }
+
+  /* Instant version, used by the Submit button on the Affirmations page. */
   .ev-btn-pothole {
     color: transparent !important;
     background: #3E1D06 !important;
@@ -729,7 +751,7 @@ function HomePage({ config, setPage }) {
       <div className="ev-hero-actions">
         <button
           ref={buttonRef}
-          className={`ev-btn ev-btn-primary${falling ? ' ev-btn-pothole' : ''}`}
+          className={`ev-btn ev-btn-primary${falling ? ' ev-btn-swallow' : ''}`}
           onClick={handleApply}
           disabled={falling}
         >
