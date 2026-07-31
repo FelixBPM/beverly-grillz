@@ -42,27 +42,138 @@ const DEFAULT_SHIFTS = [
 // a checkbox. Keeping the list a flat array of strings means the existing
 // Supabase data and the Admin editor both keep working -- an admin can add a
 // section just by typing "## Whatever" as an item.
+// The packing list is a flat array of strings so it round-trips through
+// Supabase and the Admin editor unchanged. Two prefixes give it structure:
+//   "## "  -> renders as a section heading rather than a checkbox
+//   "! "   -> marks an item the camp considers essential
+// Contents are derived from the camp's Google packing spreadsheet.
 const PACKING_SECTION_PREFIX = '## ';
+const PACKING_ESSENTIAL_PREFIX = '! ';
 
 const DEFAULT_PACKING = [
   '## For Camp',
   '2 bottles of booze',
   '4 mixers',
-  '## For You',
-  'Tent or shade structure',
-  'Sleeping bag (rated for cold nights)',
-  'Sleeping pad',
-  'At least 2 gallons of water per day',
-  'Wide-brim hat',
-  'Sunglasses (UV)',
-  'High-SPF sunscreen',
-  'Headlamp + extra batteries',
-  'Closed-toe boots or sturdy shoes',
-  'Warm layers for night',
-  'Dust mask or bandana',
+
+  '## Before You Leave',
+  '! Tickets. No, really — people forget them every year',
+  '! Drivers license, insurance, ID',
+  '! Medications and any special needs',
+  'Extra set of car keys',
+  'Printouts from Burning Man (theme camp confirmation, etc.)',
+
+  '## Shelter & Sleep',
+  '! Shelter (yurt, tent, shiftpod, etc.)',
+  '! Rebar or lag screws to stake down your tent or shade',
+  '! Tennis balls to cover the rebar — prevents shin and foot injuries',
+  'Light to mark your tent and your stakes',
+  'Tarp for under the tent',
+  'Lantern',
+  'Air mattress',
+  'Fitted sheet for the mattress',
+  'Pillows',
+  'Light blanket',
+  '! Warm blanket or sleeping bag — nights get genuinely cold',
+  'Camp chair (camp has seating, but nice to have your own)',
+  'Big plastic tub to stash things in — invaluable in a dust storm',
+
+  '## Creature Comforts',
+  '! Goggles — not optional in a dust storm',
+  '! Floppy wide-brim hat',
+  'Dust masks',
+  'Extra filters',
+  'Earplugs, and a little tin to keep them in',
+  'Sunglasses, plus a spare pair (they get lost)',
+  'Sleep mask',
+  'Mister or battery fan',
+  'Moist neck ties',
+  'Little sewing kit',
+  'Safety pins',
+
+  '## Out on the Playa',
+  '! Flashlight and/or headlamp',
+  '! Water container — Camelback, Nalgene, whatever you like',
+  'Blinky lights, LEDs, other illumination — art cars need to see you',
+  'Backpack, shoulder bag or bum bag',
+  'Little zip lock bags for MOOP you generate or find',
+
+  '## Bike & Tools',
+  'Bike',
+  'Patch kit',
+  'Bike pump',
+  'Bike lights',
+  'Lock',
+  '! Work gloves',
+  'Small tool box with a few essentials',
+  'Swiss army knife or Leatherman',
+  'Paracord, rope, bungies',
+  'Zip ties, zip ties, zip ties',
+  'Sharpie',
+  'Scissors',
+  'Electrical tape',
+  'Duct tape',
+  'Big trash bags — about 10',
+  '3 gallon zip locks',
+  '1 gallon zip locks',
+
+  '## Hygiene',
+  'Baby wipes (4 packs)',
+  'Face wipes',
+  'Paper towels',
+  'Q-tips',
+  'Shampoo and conditioner',
+  "Dr. Bronner's or other camp soap — works for dishes and people",
+  'Moisturizer, especially for hands and feet',
   'Lip balm',
-  'Personal medications',
-  'Trash bags (leave no trace)',
+  'Saline spray or vapor rub for a dried-out nose',
+  'Kleenex',
+  'Toothbrush',
+  'Toothpaste',
+  'Towels',
+  '! Toilet paper — single ply only, the portos run out',
+  'Pee bottle for late-night needs',
+  'Nail clippers',
+
+  '## Health & First Aid',
+  '! Sunblock',
+  'Eyedrops',
+  'Contact lenses and solution',
+  'Contraception',
+  'Ibuprofen or preferred pain reliever',
+  'Excedrin',
+  'Tylenol PM',
+  'Immodium and Tums',
+  'First aid kit (camp has one too)',
+  'Burn kit — it is Burning Man, after all',
+  'Hand sanitizer',
+  'Rescue Remedy for the inevitable meltdown',
+  'Arnica gel for bruises',
+  'Aloe vera gel',
+  'Moleskin or blister pads',
+  'Extra rags and towels',
+
+  '## Clothing',
+  'Pants, skirts or sarongs (2 or 3)',
+  'Shorts or short skirts (2 or 3)',
+  'Shirts — one for each day',
+  'Thermals (one pair)',
+  'Warm shirts (2 or 3)',
+  'Scarf',
+  'Warm hat',
+  'Rain gear',
+  '! Boots or closed-toe shoes',
+  'Sandals for quick runs to the portos',
+  'Costumes! Tons of them',
+
+  '## Cooking & Food',
+  '! Eating utensils — camp does not provide these',
+  '! Bowl, plate and cup — camp does not provide these',
+  'Powdered electrolyte or energy drink',
+  'Canned food, in case a meal plan goes sideways',
+  'Portable food for going out — bars, nuts, trail mix',
+  'Instant soups and meals',
+  'Quick protein — jerky, hard boiled eggs, cheese, nuts',
+  'Munchies, salty and sweet, lots of them',
 ];
 
 const DEFAULT_RESOURCES = [
@@ -413,6 +524,13 @@ const CSS = `
 
   @media (prefers-reduced-motion: reduce) {
     .ev-flyer { display: none; }
+  }
+
+  .ev-essential-badge {
+    display: inline-block; flex-shrink: 0;
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+    color: #100804; background: #C8956C;
+    padding: 3px 8px; border-radius: 20px;
   }
 
   .ev-lock {
@@ -1445,28 +1563,43 @@ function PackingPage({ items, checks, setChecks }) {
   };
 
   const isSection = (item) => String(item).startsWith(PACKING_SECTION_PREFIX);
+  const isEssential = (item) => String(item).startsWith(PACKING_ESSENTIAL_PREFIX);
+  const label = (item) => isEssential(item) ? String(item).slice(PACKING_ESSENTIAL_PREFIX.length) : String(item);
   const packable = items.filter(i => !isSection(i));
   const done = packable.filter(i => checks[i]).length;
+  const essentials = packable.filter(isEssential);
+  const essentialsDone = essentials.filter(i => checks[i]).length;
 
   return (
     <div className="ev-page">
       <h1 className="ev-section-h">Packing List</h1>
       <p className="ev-section-sub">
         {done === 0
-          ? 'Check items off as you pack.'
-          : `${done} of ${packable.length} packed.`}
+          ? 'Check items off as you pack. Your ticks are saved on this device.'
+          : `${done} of ${packable.length} packed · ${essentialsDone} of ${essentials.length} essentials.`}
       </p>
-      {PACKING_SHEET_URL && (
-        <a
-          className="ev-btn ev-btn-ghost ev-btn-small"
-          href={PACKING_SHEET_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 18 }}
-        >
-          Open the full packing spreadsheet →
-        </a>
-      )}
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        background: '#0F0805', border: '1px solid #2A1810', borderRadius: 10,
+        padding: '12px 14px', marginBottom: 20,
+      }}>
+        <span className="ev-essential-badge">Essential</span>
+        <span style={{ fontSize: 13, color: '#A88876', flex: 1, minWidth: 200 }}>
+          Marked items are the ones people most regret forgetting.
+        </span>
+        {PACKING_SHEET_URL && (
+          <a
+            className="ev-btn ev-btn-ghost ev-btn-small"
+            href={PACKING_SHEET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+          >
+            Full spreadsheet →
+          </a>
+        )}
+      </div>
       {items.map((item, i) => {
         if (isSection(item)) {
           return (
@@ -1490,7 +1623,8 @@ function PackingPage({ items, checks, setChecks }) {
             onClick={() => toggle(item)}
           >
             <input type="checkbox" checked={checked} onChange={() => toggle(item)} onClick={e => e.stopPropagation()} />
-            <span>{item}</span>
+            <span style={{ flex: 1 }}>{label(item)}</span>
+            {isEssential(item) && <span className="ev-essential-badge">Essential</span>}
           </div>
         );
       })}
@@ -1871,6 +2005,7 @@ function AdminResources({ resources, updateResources }) {
 
 function AdminPacking({ items, updatePacking }) {
   const [list, setList] = useState(items);
+  const [confirmReset, setConfirmReset] = useState(false);
   useEffect(() => setList(items), [items]);
   const update = (i, v) => { const next = [...list]; next[i] = v; setList(next); };
   const remove = (i) => setList(list.filter((_, j) => j !== i));
@@ -1886,9 +2021,40 @@ function AdminPacking({ items, updatePacking }) {
         </div>
       ))}
       <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={add}>+ Add item</button>
-      <div style={{ marginTop: 20 }}>
+
+      <p style={{ fontSize: 12, color: '#6B5749', marginTop: 16, lineHeight: 1.5 }}>
+        An item starting with <code>## </code> renders as a section heading.
+        One starting with <code>! </code> is flagged Essential.
+      </p>
+
+      <div style={{ marginTop: 20, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="ev-btn ev-btn-primary" onClick={() => updatePacking(list)}>Save list</button>
+        {/* Once a list is saved it lives in Supabase and shadows the one in the
+            code, so shipping an updated default has no visible effect without
+            this. Two-step so it can't be hit by accident. */}
+        {confirmReset ? (
+          <>
+            <button
+              className="ev-btn ev-btn-small"
+              style={{ background: '#B4503C', color: '#FBF0E0', border: 'none' }}
+              onClick={() => { setList(DEFAULT_PACKING); setConfirmReset(false); }}
+            >
+              Yes, replace my list
+            </button>
+            <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmReset(false)}>Cancel</button>
+          </>
+        ) : (
+          <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmReset(true)}>
+            Load the camp's full packing list
+          </button>
+        )}
       </div>
+      {confirmReset && (
+        <p style={{ fontSize: 12, color: '#E0A090', marginTop: 10 }}>
+          This replaces everything above with the {DEFAULT_PACKING.length}-line list from the camp
+          spreadsheet. Nothing is saved until you press Save list.
+        </p>
+      )}
     </div>
   );
 }
