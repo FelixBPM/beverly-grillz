@@ -94,11 +94,11 @@ function Giraffe({ size = 100, opacity = 1, style = {}, className = '' }) {
     >
       {/* body */}
       <ellipse cx="50" cy="80" rx="32" ry="13"/>
-      {/* legs */}
-      <rect x="65" y="88" width="4.2" height="56" rx="2"/>
-      <rect x="74" y="88" width="4.2" height="56" rx="2"/>
-      <rect x="22" y="88" width="4.2" height="56" rx="2"/>
-      <rect x="31" y="88" width="4.2" height="56" rx="2"/>
+      {/* legs — classed so they can splay outward during the fall */}
+      <rect className="ev-leg ev-leg-a" x="65" y="88" width="4.2" height="56" rx="2"/>
+      <rect className="ev-leg ev-leg-b" x="74" y="88" width="4.2" height="56" rx="2"/>
+      <rect className="ev-leg ev-leg-c" x="22" y="88" width="4.2" height="56" rx="2"/>
+      <rect className="ev-leg ev-leg-d" x="31" y="88" width="4.2" height="56" rx="2"/>
       {/* tail */}
       <path d="M 18 76 Q 11 84 9 95 Q 13 99 15 94 Q 16 87 16 80 Z"/>
       <ellipse cx="11" cy="96" rx="2.5" ry="3"/>
@@ -289,6 +289,50 @@ const CSS = `
      the delay -- see LockScreen, which unlocks immediately in that case. */
   @media (prefers-reduced-motion: reduce) {
     .ev-giraffe-hop, .ev-lock-dismiss { animation: none; }
+  }
+
+  /* ---- Apply button: the giraffe falls through the page into the button ----
+     The travel distance is measured at click time and passed in as
+     --ev-fall-dy, so it lands on the button at any viewport size. */
+  @keyframes ev-fall-through {
+    0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; animation-timing-function: ease-out; }
+    14%  { transform: translateY(-16px) rotate(-6deg) scale(1); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+    82%  { transform: translateY(calc(var(--ev-fall-dy, 260px) * 0.9)) rotate(13deg) scale(.5); opacity: 1; }
+    100% { transform: translateY(var(--ev-fall-dy, 260px)) rotate(18deg) scale(.12); opacity: 0; }
+  }
+  .ev-falling {
+    display: inline-block;
+    position: relative;
+    z-index: 5;                      /* passes in front of the badge and title */
+    transform-origin: center center;
+    animation: ev-fall-through 1.4s forwards;
+    pointer-events: none;
+  }
+
+  /* Legs splay outward and flail, the way a falling animal's do. */
+  .ev-falling .ev-leg { transform-box: view-box; }
+  .ev-falling .ev-leg-a { transform-origin: 67px 90px;   animation: ev-splay-a 1.4s ease-out forwards; }
+  .ev-falling .ev-leg-b { transform-origin: 76px 90px;   animation: ev-splay-b 1.4s ease-out forwards; }
+  .ev-falling .ev-leg-c { transform-origin: 24px 90px;   animation: ev-splay-c 1.4s ease-out forwards; }
+  .ev-falling .ev-leg-d { transform-origin: 33px 90px;   animation: ev-splay-d 1.4s ease-out forwards; }
+  @keyframes ev-splay-a { 0% { transform: rotate(0deg); } 25% { transform: rotate(26deg); } 60% { transform: rotate(18deg); } 100% { transform: rotate(30deg); } }
+  @keyframes ev-splay-b { 0% { transform: rotate(0deg); } 25% { transform: rotate(36deg); } 60% { transform: rotate(27deg); } 100% { transform: rotate(41deg); } }
+  @keyframes ev-splay-c { 0% { transform: rotate(0deg); } 25% { transform: rotate(-36deg); } 60% { transform: rotate(-26deg); } 100% { transform: rotate(-40deg); } }
+  @keyframes ev-splay-d { 0% { transform: rotate(0deg); } 25% { transform: rotate(-25deg); } 60% { transform: rotate(-17deg); } 100% { transform: rotate(-29deg); } }
+
+  /* The button becomes the hole he falls into. */
+  .ev-btn-pothole {
+    color: transparent !important;
+    background: #3E1D06 !important;
+    border-color: #3E1D06 !important;
+    box-shadow: inset 0 10px 22px rgba(0, 0, 0, .8), inset 0 -3px 8px rgba(0, 0, 0, .5);
+    transition: background .3s ease, color .2s ease, box-shadow .3s ease, border-color .3s ease;
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ev-falling { animation: none; }
+    .ev-falling .ev-leg { animation: none; }
   }
 
   .ev-lock {
@@ -558,11 +602,52 @@ function SuccessModal({ message, subMessage, onClose }) {
 // HOME PAGE
 // ============================================================
 
+const FALL_MS = 1400;
+
 function HomePage({ config, setPage }) {
+  const [falling, setFalling] = useState(false);
+  const giraffeRef = useRef(null);
+  const buttonRef = useRef(null);
+  const fallTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(fallTimer.current), []);
+
+  const handleApply = () => {
+    if (falling) return;
+
+    const reducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion || !giraffeRef.current || !buttonRef.current) {
+      setPage('apply');
+      return;
+    }
+
+    // Measure the actual gap between the giraffe and the button now, rather
+    // than hardcoding a distance -- the hero reflows with viewport width and
+    // with which optional config fields are filled in.
+    // Measure the svg, not the wrapper: an inline span reports its line box,
+    // which sits higher than the artwork and made him land short of the hole.
+    const art = giraffeRef.current.querySelector('svg') || giraffeRef.current;
+    const g = art.getBoundingClientRect();
+    const b = buttonRef.current.getBoundingClientRect();
+    const dy = (b.top + b.height / 2) - (g.top + g.height / 2);
+    giraffeRef.current.style.setProperty('--ev-fall-dy', `${dy}px`);
+
+    setFalling(true);
+    fallTimer.current = setTimeout(() => setPage('apply'), FALL_MS);
+  };
+
   return (
     <div className="ev-hero">
       <div style={{ color: '#C8956C' }}>
-        <Giraffe size={64} />
+        <span
+          ref={giraffeRef}
+          className={falling ? 'ev-falling' : undefined}
+          style={{ display: 'inline-block' }}
+        >
+          <Giraffe size={64} />
+        </span>
       </div>
       {config.year && (
         <div className="ev-hero-badge">{config.year} Edition</div>
@@ -584,7 +669,12 @@ function HomePage({ config, setPage }) {
         <p className="ev-hero-desc">{config.description}</p>
       )}
       <div className="ev-hero-actions">
-        <button className="ev-btn ev-btn-primary" onClick={() => setPage('apply')}>
+        <button
+          ref={buttonRef}
+          className={`ev-btn ev-btn-primary${falling ? ' ev-btn-pothole' : ''}`}
+          onClick={handleApply}
+          disabled={falling}
+        >
           Apply for 2026 →
         </button>
       </div>
