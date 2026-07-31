@@ -397,7 +397,9 @@ const CSS = `
 
   /* --- LOCK SCREEN --- */
   /* Giraffe celebration on a correct password: crouch, two travelling hops
-     with squash-and-stretch, then a last hop up as the panel fades out. */
+     with squash-and-stretch, then a hop back to where he started. He must
+     finish at translate(0,0) scale(1,1) -- the home page renders him in that
+     exact spot, so landing anywhere else makes him jump on the handover. */
   @keyframes ev-giraffe-hop {
     0%   { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
     6%   { transform: translate(0, 6px) scale(1.14, 0.84) rotate(0deg); }
@@ -409,7 +411,9 @@ const CSS = `
     70%  { transform: translate(-22px, 0) scale(1.12, 0.88) rotate(0deg); }
     76%  { transform: translate(-22px, 0) scale(1, 1) rotate(0deg); }
     82%  { transform: translate(-22px, 5px) scale(1.14, 0.84) rotate(0deg); }
-    100% { transform: translate(0, -50px) scale(0.92, 1.12) rotate(0deg); }
+    92%  { transform: translate(-11px, -30px) scale(0.92, 1.12) rotate(3deg); }
+    97%  { transform: translate(0, 0) scale(1.12, 0.88) rotate(0deg); }
+    100% { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
   }
   .ev-giraffe-hop {
     display: inline-block;
