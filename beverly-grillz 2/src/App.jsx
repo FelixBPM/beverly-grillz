@@ -1411,7 +1411,9 @@ function ResourcesPage({ resources }) {
 // PACKING PAGE
 // ============================================================
 
-const PACKING_SHEET_URL = '';
+// Full packing spreadsheet — a copy of the community list, with its four tabs
+// (Intro, Creature Comforts, Camp Needs, Cooking and Food), owned by the camp.
+const PACKING_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1oF1EtxtShFa26DX3c-RX_J8GzS89Zk87ozvWUAAKwXo/edit';
 
 function PackingPage({ items, checks, setChecks }) {
   const toggle = async (item) => {
