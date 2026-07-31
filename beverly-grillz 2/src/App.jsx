@@ -80,7 +80,7 @@ const newId = () => 'u' + Math.random().toString(36).slice(2, 10);
 // GIRAFFE — reusable silhouette, color via currentColor
 // ============================================================
 
-function Giraffe({ size = 100, opacity = 1, style = {}, className = '' }) {
+function Giraffe({ size = 100, opacity = 1, style = {}, className = '', wings = false }) {
   return (
     <svg
       width={size}
@@ -92,8 +92,23 @@ function Giraffe({ size = 100, opacity = 1, style = {}, className = '' }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
+      {/* far wing sits behind the body, near wing in front, so it reads 3D */}
+      {wings && (
+        <path
+          className="ev-wing ev-wing-far"
+          fill="#E8D6C4"
+          d="M 50 77 Q 33 70 18 55 Q 31 61 42 62 Q 25 50 17 32 Q 34 45 50 60 Z"
+        />
+      )}
       {/* body */}
       <ellipse cx="50" cy="80" rx="32" ry="13"/>
+      {wings && (
+        <path
+          className="ev-wing ev-wing-near"
+          fill="#FFFBF5"
+          d="M 55 74 Q 34 66 12 47 Q 28 55 41 57 Q 19 42 9 20 Q 31 35 52 56 Z"
+        />
+      )}
       {/* legs — classed so they can splay outward during the fall */}
       <rect className="ev-leg ev-leg-a" x="65" y="88" width="4.2" height="56" rx="2"/>
       <rect className="ev-leg ev-leg-b" x="74" y="88" width="4.2" height="56" rx="2"/>
@@ -335,53 +350,37 @@ const CSS = `
     .ev-falling .ev-leg { animation: none; }
   }
 
-  /* ---- Moonwalking giraffe across the top of the confirmation ----
-     He faces right (head and neck are on the right of the artwork) but
-     travels left, which is what sells the moonwalk. The legs run a diagonal
-     gait -- front-left with back-right -- so it reads as walking forward
-     while he slides backward. */
-  .ev-moonwalk-strip {
-    position: relative;
-    height: 58px;
-    overflow: hidden;
+  /* ---- Winged launch out of the Submit button ----
+     The button darkens to the same hole colour used on the home page, then
+     the giraffe pops out of it and flies up and away. Positioned with fixed
+     coordinates measured off the button, so it starts exactly on it. */
+  .ev-flyer {
+    position: fixed;
+    z-index: 60;
+    transform: translate(-50%, -50%);
     color: #C8956C;
-    margin-bottom: 8px;
+    pointer-events: none;
   }
-  .ev-moonwalk-track {
-    position: absolute;
-    inset: 0;
-    animation: ev-mw-travel 7s linear infinite;
-  }
-  /* The track is the full width of the strip and the giraffe sits at its left
-     edge, so these percentages are strip-widths. Stopping at -9% rather than
-     -115% means he exits the left edge just as the loop restarts, instead of
-     sliding through a long invisible stretch. */
-  @keyframes ev-mw-travel {
-    from { transform: translateX(101%); }
-    to   { transform: translateX(-9%); }
-  }
-  .ev-moonwalk-body {
-    position: absolute;
-    left: 0;
-    bottom: 0;
+  .ev-flyer-inner {
     display: inline-block;
-    transform-origin: bottom center;
-    animation: ev-mw-bob .52s ease-in-out infinite;
+    animation: ev-fly-away 1.7s cubic-bezier(.35, 0, .5, 1) forwards;
   }
-  @keyframes ev-mw-bob {
-    0%, 100% { transform: translateY(0) rotate(-7deg); }
-    50%      { transform: translateY(-3px) rotate(-5deg); }
+  @keyframes ev-fly-away {
+    0%   { transform: translate(0, 14px) scale(.2) rotate(0deg); opacity: 0; }
+    10%  { transform: translate(0, -6px) scale(1.18) rotate(-2deg); opacity: 1; }
+    18%  { transform: translate(2px, -18px) scale(1) rotate(0deg); opacity: 1; }
+    45%  { transform: translate(26px, -120px) scale(.92) rotate(-6deg); opacity: 1; }
+    75%  { transform: translate(64px, -300px) scale(.72) rotate(-10deg); opacity: .85; }
+    100% { transform: translate(110px, -520px) scale(.45) rotate(-14deg); opacity: 0; }
   }
-  .ev-moonwalk-body .ev-leg { transform-box: view-box; }
-  .ev-moonwalk-body .ev-leg-a { transform-origin: 67px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-b { transform-origin: 76px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-c { transform-origin: 24px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
-  @keyframes ev-mw-legfwd  { 0%, 100% { transform: rotate(19deg); }  50% { transform: rotate(-15deg); } }
-  @keyframes ev-mw-legback { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(19deg); } }
+  .ev-wing { transform-box: view-box; transform-origin: 53px 70px; }
+  .ev-wing-near { animation: ev-flap-near .26s ease-in-out infinite; }
+  .ev-wing-far  { animation: ev-flap-far  .26s ease-in-out infinite; }
+  @keyframes ev-flap-near { 0%, 100% { transform: rotate(-20deg); } 50% { transform: rotate(24deg); } }
+  @keyframes ev-flap-far  { 0%, 100% { transform: rotate(-8deg); }  50% { transform: rotate(36deg); } }
 
   @media (prefers-reduced-motion: reduce) {
-    .ev-moonwalk-strip { display: none; }
+    .ev-flyer { display: none; }
   }
 
   .ev-lock {
@@ -1882,6 +1881,12 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [launching, setLaunching] = useState(false); // button darkened while saving
+  const [flyFrom, setFlyFrom] = useState(null);      // {x, y} centre of the button
+  const submitBtnRef = useRef(null);
+  const flyTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(flyTimer.current), []);
   const allChecked = CAMP_AGREEMENTS_LIST.every((_, i) => checked[i]);
   const checkedCount = Object.values(checked).filter(Boolean).length;
 
@@ -1889,9 +1894,28 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   // on success, so the success screen must not read it to decide what to say.
   const [wasApplication, setWasApplication] = useState(false);
 
+  const FLIGHT_MS = 1700;
+
+  const reducedMotion = () => typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Only launch after the write has actually landed -- a failed save must show
+  // the error, not fly the giraffe away.
+  const launchThenFinish = () => {
+    if (reducedMotion() || !submitBtnRef.current) {
+      setSubmitted(true);
+      return;
+    }
+    const b = submitBtnRef.current.getBoundingClientRect();
+    setFlyFrom({ x: b.left + b.width / 2, y: b.top + b.height / 2 });
+    flyTimer.current = setTimeout(() => setSubmitted(true), FLIGHT_MS);
+  };
+
   const handleSubmit = async () => {
-    if (!allChecked || submitting) return;
+    if (!allChecked || submitting || launching) return;
     setSubmitError(null);
+    setLaunching(true);
 
     if (pendingApplication && typeof onApplicationSubmit === 'function') {
       setWasApplication(true);
@@ -1915,23 +1939,17 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
       setSubmitting(false);
       // Only claim success if the write actually landed.
       if (!result || result.ok !== true) {
+        setLaunching(false);
         setSubmitError((result && result.error) || 'Your application could not be saved. Please try again.');
         return;
       }
     }
-    setSubmitted(true);
+    launchThenFinish();
   };
 
   if (submitted) {
     return (
       <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
-        <div className="ev-moonwalk-strip" aria-hidden="true">
-          <span className="ev-moonwalk-track">
-            <span className="ev-moonwalk-body">
-              <Giraffe size={40} />
-            </span>
-          </span>
-        </div>
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
         <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 400, color: '#FBF0E0', marginBottom: '0.75rem' }}>
           {wasApplication ? "You're all set!" : "Affirmations complete!"}
@@ -1953,6 +1971,13 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
           <p style={{ fontSize: 14, color: '#C8956C', fontWeight: 500 }}>
             Almost there, {pendingApplication.name}! Check all the boxes below, then hit Submit to complete your application.
           </p>
+        </div>
+      )}
+      {flyFrom && (
+        <div className="ev-flyer" style={{ left: flyFrom.x, top: flyFrom.y }} aria-hidden="true">
+          <span className="ev-flyer-inner">
+            <Giraffe size={56} wings />
+          </span>
         </div>
       )}
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
@@ -1980,8 +2005,9 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
           </div>
         )}
         <button
-          className="ev-btn ev-btn-primary"
-          disabled={!allChecked || submitting}
+          ref={submitBtnRef}
+          className={`ev-btn ev-btn-primary${launching ? ' ev-btn-pothole' : ''}`}
+          disabled={!allChecked || submitting || launching}
           onClick={handleSubmit}
           style={{ width: '100%', padding: '14px', fontSize: 15, opacity: allChecked && !submitting ? 1 : 0.5, cursor: allChecked && !submitting ? 'pointer' : 'not-allowed' }}
         >
