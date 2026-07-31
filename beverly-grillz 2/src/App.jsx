@@ -260,6 +260,37 @@ const CSS = `
   .ev-modal p { color: #A88876; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
 
   /* --- LOCK SCREEN --- */
+  /* Giraffe celebration on a correct password: crouch, two travelling hops
+     with squash-and-stretch, then a last hop up as the panel fades out. */
+  @keyframes ev-giraffe-hop {
+    0%   { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
+    6%   { transform: translate(0, 6px) scale(1.14, 0.84) rotate(0deg); }
+    20%  { transform: translate(18px, -34px) scale(0.9, 1.14) rotate(6deg); }
+    32%  { transform: translate(34px, 0) scale(1.12, 0.88) rotate(0deg); }
+    38%  { transform: translate(34px, 0) scale(1, 1) rotate(0deg); }
+    44%  { transform: translate(34px, 6px) scale(1.14, 0.84) rotate(0deg); }
+    58%  { transform: translate(6px, -38px) scale(0.9, 1.14) rotate(-7deg); }
+    70%  { transform: translate(-22px, 0) scale(1.12, 0.88) rotate(0deg); }
+    76%  { transform: translate(-22px, 0) scale(1, 1) rotate(0deg); }
+    82%  { transform: translate(-22px, 5px) scale(1.14, 0.84) rotate(0deg); }
+    100% { transform: translate(0, -50px) scale(0.92, 1.12) rotate(0deg); }
+  }
+  .ev-giraffe-hop {
+    display: inline-block;
+    transform-origin: bottom center;
+    animation: ev-giraffe-hop 1.5s ease-in-out forwards;
+  }
+  @keyframes ev-lock-dismiss {
+    to { opacity: 0; transform: translateY(6px); }
+  }
+  .ev-lock-dismiss { animation: ev-lock-dismiss .45s ease forwards; }
+
+  /* Anyone who has asked their OS to reduce motion gets neither the hop nor
+     the delay -- see LockScreen, which unlocks immediately in that case. */
+  @media (prefers-reduced-motion: reduce) {
+    .ev-giraffe-hop, .ev-lock-dismiss { animation: none; }
+  }
+
   .ev-lock {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     padding: 24px; background: radial-gradient(ellipse at 50% 30%, #1E0E06 0%, #100804 70%);
@@ -430,29 +461,53 @@ function InjectCSS() {
 // LOCK SCREEN
 // ============================================================
 
+const HOP_MS = 1500;
+
 function LockScreen({ config, onUnlock }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const hopTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(hopTimer.current), []);
 
   const attempt = () => {
-    if (pw === config.eventPassword) {
-      onUnlock();
-    } else {
+    if (pw !== config.eventPassword) {
       setErr(true);
       setPw('');
       setTimeout(() => setErr(false), 1500);
+      return;
     }
+    if (celebrating) return;
+
+    const reducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Don't make someone who asked for reduced motion sit through a delay
+    // with nothing happening -- let them straight in.
+    if (reducedMotion) {
+      onUnlock();
+      return;
+    }
+
+    setCelebrating(true);
+    hopTimer.current = setTimeout(onUnlock, HOP_MS);
   };
 
   return (
     <div className="ev-lock">
       <div className="ev-lock-box">
         <div style={{ color: '#C8956C', marginBottom: 8 }}>
-          <Giraffe size={60} />
+          <span className={celebrating ? 'ev-giraffe-hop' : undefined}>
+            <Giraffe size={60} />
+          </span>
         </div>
         <h1>{config.eventName}</h1>
-        <p>Contact your organizer for the password</p>
-        <div className="ev-field">
+        <p className={celebrating ? 'ev-lock-dismiss' : undefined}>
+          {celebrating ? 'See you on the playa' : 'Contact your organizer for the password'}
+        </p>
+        <div className={`ev-field${celebrating ? ' ev-lock-dismiss' : ''}`}>
           <input
             className="ev-input"
             type="password"
@@ -465,7 +520,12 @@ function LockScreen({ config, onUnlock }) {
           />
           {err && <p style={{ color: '#8B3020', fontSize: 13, marginTop: 6, textAlign: 'center' }}>Incorrect password</p>}
         </div>
-        <button className="ev-btn ev-btn-primary" style={{ width: '100%' }} onClick={attempt}>
+        <button
+          className={`ev-btn ev-btn-primary${celebrating ? ' ev-lock-dismiss' : ''}`}
+          style={{ width: '100%' }}
+          onClick={attempt}
+          disabled={celebrating}
+        >
           Enter
         </button>
       </div>
