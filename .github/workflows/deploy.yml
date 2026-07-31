@@ -17,7 +17,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # The @supabase/* packages now require Node >= 22; on 20 every
+          # install emits EBADENGINE warnings.
+          node-version: 22
 
       - name: Install dependencies
         run: npm install
@@ -33,3 +35,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: "beverly-grillz 2"
+          # Without this the action installed wrangler 3.90.0 -- a major
+          # version behind. On 2026-07-31 Cloudflare began returning a 520
+          # HTML error page to it ("Received a malformed response from the
+          # API") and every deploy failed while the build itself passed.
+          wranglerVersion: "4"
