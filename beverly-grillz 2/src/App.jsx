@@ -335,6 +335,55 @@ const CSS = `
     .ev-falling .ev-leg { animation: none; }
   }
 
+  /* ---- Moonwalking giraffe across the top of the confirmation ----
+     He faces right (head and neck are on the right of the artwork) but
+     travels left, which is what sells the moonwalk. The legs run a diagonal
+     gait -- front-left with back-right -- so it reads as walking forward
+     while he slides backward. */
+  .ev-moonwalk-strip {
+    position: relative;
+    height: 58px;
+    overflow: hidden;
+    color: #C8956C;
+    margin-bottom: 8px;
+  }
+  .ev-moonwalk-track {
+    position: absolute;
+    inset: 0;
+    animation: ev-mw-travel 7s linear infinite;
+  }
+  /* The track is the full width of the strip and the giraffe sits at its left
+     edge, so these percentages are strip-widths. Stopping at -9% rather than
+     -115% means he exits the left edge just as the loop restarts, instead of
+     sliding through a long invisible stretch. */
+  @keyframes ev-mw-travel {
+    from { transform: translateX(101%); }
+    to   { transform: translateX(-9%); }
+  }
+  .ev-moonwalk-body {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    display: inline-block;
+    transform-origin: bottom center;
+    animation: ev-mw-bob .52s ease-in-out infinite;
+  }
+  @keyframes ev-mw-bob {
+    0%, 100% { transform: translateY(0) rotate(-7deg); }
+    50%      { transform: translateY(-3px) rotate(-5deg); }
+  }
+  .ev-moonwalk-body .ev-leg { transform-box: view-box; }
+  .ev-moonwalk-body .ev-leg-a { transform-origin: 67px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-b { transform-origin: 76px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-c { transform-origin: 24px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
+  @keyframes ev-mw-legfwd  { 0%, 100% { transform: rotate(19deg); }  50% { transform: rotate(-15deg); } }
+  @keyframes ev-mw-legback { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(19deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ev-moonwalk-strip { display: none; }
+  }
+
   .ev-lock {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     padding: 24px; background: radial-gradient(ellipse at 50% 30%, #1E0E06 0%, #100804 70%);
@@ -1876,6 +1925,13 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   if (submitted) {
     return (
       <div className="ev-page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
+        <div className="ev-moonwalk-strip" aria-hidden="true">
+          <span className="ev-moonwalk-track">
+            <span className="ev-moonwalk-body">
+              <Giraffe size={40} />
+            </span>
+          </span>
+        </div>
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔥</div>
         <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, fontWeight: 400, color: '#FBF0E0', marginBottom: '0.75rem' }}>
           {wasApplication ? "You're all set!" : "Affirmations complete!"}
