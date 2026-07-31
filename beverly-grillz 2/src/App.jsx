@@ -38,7 +38,17 @@ const DEFAULT_SHIFTS = [
   { id: 's10', name: 'Tear-down Crew', day: 'Sunday', time: '12:00–3:00 pm', capacity: 8, signups: [] },
 ];
 
+// A packing entry beginning with "## " renders as a section heading instead of
+// a checkbox. Keeping the list a flat array of strings means the existing
+// Supabase data and the Admin editor both keep working -- an admin can add a
+// section just by typing "## Whatever" as an item.
+const PACKING_SECTION_PREFIX = '## ';
+
 const DEFAULT_PACKING = [
+  '## For Camp',
+  '2 bottles of booze',
+  '4 mixers',
+  '## For You',
   'Tent or shade structure',
   'Sleeping bag (rated for cold nights)',
   'Sleeping pad',
@@ -62,7 +72,7 @@ const DEFAULT_RESOURCES = [
 ];
 
 const DEFAULT_CALENDAR = [
-  { id: 'c1', date: 'Thu, Aug 6 at 5pm', label: 'Shift sign-ups open' },
+  { id: 'c1', date: 'Thu, Aug 6 at 5pm EST', label: 'Shift sign-ups open' },
   { id: 'c2', date: 'Aug 26', label: 'Early crew starts arriving' },
   { id: 'c3', date: 'Aug 30th', label: 'The Gates Open / Burningman Starts' },
   { id: 'c6', date: 'September 7th', label: 'Burningman Ends!' },
@@ -1401,6 +1411,8 @@ function ResourcesPage({ resources }) {
 // PACKING PAGE
 // ============================================================
 
+const PACKING_SHEET_URL = '';
+
 function PackingPage({ items, checks, setChecks }) {
   const toggle = async (item) => {
     const next = { ...checks, [item]: !checks[item] };
@@ -1408,7 +1420,9 @@ function PackingPage({ items, checks, setChecks }) {
     await save('packingChecks', next, false);
   };
 
-  const done = Object.values(checks).filter(Boolean).length;
+  const isSection = (item) => String(item).startsWith(PACKING_SECTION_PREFIX);
+  const packable = items.filter(i => !isSection(i));
+  const done = packable.filter(i => checks[i]).length;
 
   return (
     <div className="ev-page">
@@ -1416,9 +1430,34 @@ function PackingPage({ items, checks, setChecks }) {
       <p className="ev-section-sub">
         {done === 0
           ? 'Check items off as you pack.'
-          : `${done} of ${items.length} packed.`}
+          : `${done} of ${packable.length} packed.`}
       </p>
+      {PACKING_SHEET_URL && (
+        <a
+          className="ev-btn ev-btn-ghost ev-btn-small"
+          href={PACKING_SHEET_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 18 }}
+        >
+          Open the full packing spreadsheet →
+        </a>
+      )}
       {items.map((item, i) => {
+        if (isSection(item)) {
+          return (
+            <h2
+              key={i}
+              style={{
+                fontFamily: 'Cormorant Garamond, serif', fontWeight: 500, fontSize: 22,
+                color: '#C8956C', margin: i === 0 ? '0 0 10px' : '28px 0 10px',
+                paddingBottom: 6, borderBottom: '1px solid #2A1810',
+              }}
+            >
+              {item.slice(PACKING_SECTION_PREFIX.length)}
+            </h2>
+          );
+        }
         const checked = !!checks[item];
         return (
           <div
@@ -1439,18 +1478,102 @@ function PackingPage({ items, checks, setChecks }) {
 // DATES PAGE
 // ============================================================
 
+// Calendar rows are free text, so we can't derive a real timestamp from most of
+// them. Only entries we can pin to an exact moment get "add to calendar" links.
+const CALENDAR_EVENTS = [
+  {
+    match: /shift sign-?ups? open/i,
+    title: 'Beverly Grillz — shift sign-ups open',
+    start: SHIFTS_OPEN_AT,
+    minutes: 30,
+    details: 'Shift sign-ups open at permanentdisco.com — grab your shifts.',
+    location: 'permanentdisco.com',
+  },
+];
+
+function icsStamp(d) {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function googleCalendarUrl(ev) {
+  const end = new Date(ev.start.getTime() + ev.minutes * 60000);
+  const q = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: ev.title,
+    dates: `${icsStamp(ev.start)}/${icsStamp(end)}`,
+    details: ev.details,
+    location: ev.location,
+  });
+  return `https://calendar.google.com/calendar/render?${q.toString()}`;
+}
+
+function downloadIcs(ev) {
+  const end = new Date(ev.start.getTime() + ev.minutes * 60000);
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Beverly Grillz//EN',
+    'BEGIN:VEVENT',
+    `UID:${icsStamp(ev.start)}-beverlygrillz@permanentdisco.com`,
+    `DTSTAMP:${icsStamp(ev.start)}`,
+    `DTSTART:${icsStamp(ev.start)}`,
+    `DTEND:${icsStamp(end)}`,
+    `SUMMARY:${ev.title}`,
+    `DESCRIPTION:${ev.details}`,
+    `LOCATION:${ev.location}`,
+    'BEGIN:VALARM',
+    'TRIGGER:-PT30M',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Reminder',
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'beverly-grillz-shift-signups.ics';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function DatesPage({ calendar }) {
   return (
     <div className="ev-page">
       <h1 className="ev-section-h">Dates</h1>
       <p className="ev-section-sub">Key dates for the 2026 season.</p>
       <div className="ev-dates-year">2026 Calendar</div>
-      {calendar.map(ev => (
-        <div key={ev.id} className="ev-date-row">
-          <div className="ev-date-date">{ev.date}</div>
-          <div className="ev-date-label">{ev.label}</div>
-        </div>
-      ))}
+      {calendar.map(ev => {
+        const known = CALENDAR_EVENTS.find(k => k.match.test(ev.label || ''));
+        return (
+          <div key={ev.id} className="ev-date-row">
+            <div className="ev-date-date">{ev.date}</div>
+            <div className="ev-date-label">
+              {ev.label}
+              {known && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <a
+                    className="ev-btn ev-btn-ghost ev-btn-small"
+                    href={googleCalendarUrl(known)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    + Google Calendar
+                  </a>
+                  <button
+                    className="ev-btn ev-btn-ghost ev-btn-small"
+                    onClick={() => downloadIcs(known)}
+                  >
+                    + Apple / Outlook
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1859,7 +1982,7 @@ function AdminLock({ config, onLogin }) {
 // ============================================================
 
 const CAMP_AGREEMENTS_LIST = [
-  "I will check in after reasonably after arrival with Terry, Maria, Rana, or Brian",
+  "I will check in reasonably after arrival with Terry, Maria, Rana, or Brian",
   "I will fill in my dates of arrival/departure on the ride share document",
   "I will demoop my area prior to departure",
   "I will participate in moop sweeps throughout my time on the playa",
