@@ -3,7 +3,7 @@ import {
   load, save, saveApplication, loadAllApplications, deleteApplication,
   uploadGalleryImage, loadGalleryImages, deleteGalleryImage,
   loadGalleryVotes, setGalleryVote, galleryPublicUrl,
-  GALLERY_MAX_BYTES, GALLERY_ACCEPT,
+  GALLERY_ACCEPT,
 } from './storage';
 
 // ============================================================
@@ -1898,9 +1898,6 @@ function CampGallery({ isAdmin }) {
         >
           {uploading ? 'Uploading…' : 'Add image'}
         </button>
-        <span style={{ color: '#6B5749', fontSize: 12 }}>
-          Up to {GALLERY_MAX_BYTES / 1048576}MB each. Your original is kept at full quality.
-        </span>
       </div>
 
       {uploadError && (
