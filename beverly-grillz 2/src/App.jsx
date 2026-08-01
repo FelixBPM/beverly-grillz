@@ -2234,8 +2234,7 @@ const LEADERSHIP_LINK_GROUPS = [
       },
       {
         name: '2026 Master List — Camper and Contact Info',
-        note: 'Link not set yet.',
-        url: '',
+        url: 'https://docs.google.com/spreadsheets/d/1s7fwGTpAmrA116jzm45BdUHR6y3YjgOokXhhXjV2MuA/edit?gid=139811365#gid=139811365',
       },
       {
         name: '2026 Food Program Overview',
@@ -2595,12 +2594,50 @@ function CampNeedsPage() {
 // provides. `allow="autoplay"` passes that activation into the iframe. iOS
 // Safari ignores it, so the widget's own play button is left visible.
 
-const MUSIC_TRACK_URL = 'https://soundcloud.com/coronado_collective/102223-violet-ride-flow';
-const MUSIC_DISMISS_KEY = 'ev-music-dismissed';
+// Add tracks here and the rotation picks them up. Full canonical URLs only --
+// on.soundcloud.com short links are not resolvable by the widget.
+const MUSIC_TRACKS = [
+  'https://soundcloud.com/coronado_collective/102223-violet-ride-flow',
+];
 
-function musicEmbedSrc() {
+const MUSIC_DISMISS_KEY = 'ev-music-dismissed';
+const MUSIC_INDEX_KEY = 'ev-music-index';
+
+// Advance one track per visit rather than picking at random. Random repeats --
+// with a short list you'd hear the same song three visits running often enough
+// to notice, which is the whole thing this is meant to avoid. Cycling
+// guarantees a new one every time until the list wraps.
+//
+// The first visit starts at a random point so the whole camp isn't
+// synchronised on track one.
+function advanceTrackIndex() {
+  const n = MUSIC_TRACKS.length;
+  if (n <= 1) return 0;
+  try {
+    const raw = localStorage.getItem(MUSIC_INDEX_KEY);
+    const next = raw == null
+      ? Math.floor(Math.random() * n)
+      : (Number(raw) + 1) % n;
+    const safe = Number.isFinite(next) ? ((next % n) + n) % n : 0;
+    localStorage.setItem(MUSIC_INDEX_KEY, String(safe));
+    return safe;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// Resolved once per page load. MusicBar mounts when the lock screen clears,
+// but React can mount a component twice in development, and a remount must
+// not burn through two tracks -- so the choice is memoised at module scope.
+let visitTrackIndex = null;
+function trackForThisVisit() {
+  if (visitTrackIndex == null) visitTrackIndex = advanceTrackIndex();
+  return MUSIC_TRACKS[visitTrackIndex] || MUSIC_TRACKS[0];
+}
+
+function musicEmbedSrc(trackUrl) {
   const params = new URLSearchParams({
-    url: MUSIC_TRACK_URL,
+    url: trackUrl,
     color: '#c8956c',
     auto_play: 'true',
     hide_related: 'true',
@@ -2618,6 +2655,9 @@ function MusicBar() {
     try { return localStorage.getItem(MUSIC_DISMISS_KEY) === '1'; } catch (e) { return false; }
   });
 
+  // Held in state so a re-render can't reshuffle the track mid-listen.
+  const [trackUrl] = useState(trackForThisVisit);
+
   // The bar floats over the bottom of the page, so the document needs room
   // underneath it or the last row of any page sits behind it.
   useEffect(() => {
@@ -2632,7 +2672,7 @@ function MusicBar() {
     <div className="ev-music-bar">
       <iframe
         title="Beverly Grillz camp track"
-        src={musicEmbedSrc()}
+        src={musicEmbedSrc(trackUrl)}
         height="66"
         scrolling="no"
         frameBorder="no"
