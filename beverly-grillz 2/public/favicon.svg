@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- Beverly Grillz favicon: the camp giraffe's head.
+       The whole animal doesn't survive a 16px tab icon -- the legs are 4 units
+       wide in a 120-unit box and alias away to nothing. Cropped tight to the
+       head so the ossicones, ear and snout are still legible at 16px, which is
+       what makes it read as a giraffe rather than an orange smudge. -->
+  <rect width="120" height="120" rx="22" fill="#0F0805"/>
+  <g fill="#C8956C" transform="translate(-261.8, 15.1) scale(3.46)">
+    <!-- neck (only the top few units are inside the crop) -->
+    <path d="M 70 72 L 78 72 L 92 17 L 83 14 Z"/>
+    <!-- head -->
+    <ellipse cx="93" cy="16" rx="9" ry="5"/>
+    <!-- snout -->
+    <path d="M 99 14 L 105 16 L 103 21 L 98 19 Z"/>
+    <!-- ossicones -->
+    <rect x="84.5" y="6" width="2" height="6" rx="1"/>
+    <circle cx="85.5" cy="5" r="2"/>
+    <rect x="89" y="7" width="2" height="5" rx="1"/>
+    <circle cx="90" cy="6" r="1.7"/>
+    <!-- ear -->
+    <ellipse cx="89" cy="13" rx="3" ry="1.8" transform="rotate(-35 89 13)"/>
+  </g>
+</svg>

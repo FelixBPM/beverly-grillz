@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { load, save, saveApplication, loadAllApplications, deleteApplication } from './storage';
+import {
+  load, save, saveApplication, loadAllApplications, deleteApplication,
+  uploadGalleryImage, loadGalleryImages, deleteGalleryImage,
+  loadGalleryVotes, setGalleryVote, galleryPublicUrl,
+  GALLERY_MAX_BYTES, GALLERY_ACCEPT,
+} from './storage';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -577,6 +582,92 @@ const CSS = `
   .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
   @keyframes ev-mw-legfwd  { 0%, 100% { transform: rotate(19deg); }  50% { transform: rotate(-15deg); } }
   @keyframes ev-mw-legback { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(19deg); } }
+
+  /* ---- Camp gallery ---- */
+  .ev-gallery-h {
+    font-family: 'Cormorant Garamond', serif; font-weight: 400;
+    font-size: 30px; color: #FBF0E0; margin-bottom: 6px;
+  }
+  .ev-gallery-upload {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: #0F0805; border: 1px solid #2A1810; border-radius: 10px;
+    padding: 14px; margin-bottom: 16px;
+  }
+  .ev-gallery-alert {
+    background: rgba(190, 70, 50, .12); border: 1px solid #B4503C;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 16px;
+    color: #E0A090; font-size: 13px; line-height: 1.5;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  }
+  .ev-gallery-dismiss {
+    flex-shrink: 0; background: transparent; border: 0; color: #E0A090;
+    cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px;
+  }
+  .ev-gallery-danger { border-color: #8B3020; color: #E0A090; }
+  .ev-gallery-danger:hover:not(:disabled) { background: #8B3020; color: #FBF0E0; }
+  .ev-vote:disabled, .ev-gallery-danger:disabled { opacity: .45; cursor: default; }
+  .ev-sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  /* Big thumbnails: one comfortable column on a phone, as many as fit after. */
+  .ev-gallery-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .ev-gallery-card {
+    background: #0F0805; border: 1px solid #2A1810; border-radius: 10px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .ev-gallery-shot {
+    display: block; width: 100%; padding: 0; border: 0; cursor: zoom-in;
+    /* Checkerboard so a transparent PNG logo doesn't vanish into the page. */
+    background-color: #17100C;
+    background-image:
+      linear-gradient(45deg, #1E1510 25%, transparent 25%, transparent 75%, #1E1510 75%),
+      linear-gradient(45deg, #1E1510 25%, transparent 25%, transparent 75%, #1E1510 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 9px 9px;
+  }
+  .ev-gallery-shot img {
+    display: block; width: 100%; height: 240px;
+    object-fit: contain;
+  }
+  .ev-gallery-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 10px 12px;
+  }
+  .ev-gallery-by {
+    color: #A88876; font-size: 13px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ev-gallery-votes { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .ev-gallery-score { color: #C8956C; font-size: 13px; font-weight: 700; min-width: 20px; text-align: center; }
+  .ev-vote {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 1px solid #2A1810; border-radius: 6px;
+    color: #8B6F5C; cursor: pointer; font-size: 12px; padding: 4px 8px;
+  }
+  .ev-vote:hover { color: #C8956C; border-color: #C8956C; }
+  .ev-vote.active { color: #100804; background: #C8956C; border-color: #C8956C; }
+  .ev-vote.active.down { color: #F0D8CC; background: #8B3020; border-color: #8B3020; }
+  .ev-gallery-actions {
+    display: flex; gap: 8px; padding: 0 12px 12px; flex-wrap: wrap;
+  }
+  .ev-gallery-lightbox {
+    background: #0B0503; border: 1px solid #2A1810; border-radius: 12px;
+    max-width: min(94vw, 1100px); max-height: 92vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ev-gallery-lightbox img {
+    display: block; max-width: 100%; max-height: calc(92vh - 58px);
+    object-fit: contain; margin: auto;
+  }
+  .ev-gallery-lightbox-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 10px 12px; border-top: 1px solid #2A1810;
+    color: #6B5749; font-size: 12px; flex-wrap: wrap;
+  }
 
   /* ---- Music bar ---- */
   .ev-music-bar {
@@ -1578,7 +1669,380 @@ function RideSharePage() {
 // RESOURCES PAGE
 // ============================================================
 
-function ResourcesPage({ resources }) {
+// ============================================================
+// CAMP GALLERY
+// ============================================================
+// Anyone past the lock screen can post an image and vote on it. There are no
+// accounts, so "who am I" is a random id kept in localStorage. That is enough
+// to stop a person double-voting by accident and to let them pull back their
+// own upload -- it is NOT a security boundary. Clearing site data, or opening
+// the site in another browser, makes you a new person who can vote again. For
+// a camp deciding on a logo that is a fair trade; don't run an election on it.
+
+const VISITOR_ID_KEY = 'ev-visitor-id';
+const UPLOADER_NAME_KEY = 'ev-uploader-name';
+
+function newVisitorId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+// Falls back to a fresh per-session id rather than a shared literal when
+// localStorage is unavailable (private windows, in-app webviews, cookies
+// blocked). A fixed string like 'anon' would make every such visitor the SAME
+// person: they'd overwrite each other's votes, and each would see a Remove
+// button on the others' uploads.
+function getVisitorId() {
+  try {
+    let v = localStorage.getItem(VISITOR_ID_KEY);
+    if (!v) {
+      v = newVisitorId();
+      localStorage.setItem(VISITOR_ID_KEY, v);
+    }
+    return v;
+  } catch (e) {
+    return newVisitorId();
+  }
+}
+
+function CampGallery({ isAdmin }) {
+  const [images, setImages] = useState([]);
+  const [votes, setVotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [voting, setVoting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmArmed, setConfirmArmed] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [name, setName] = useState(() => {
+    try { return localStorage.getItem(UPLOADER_NAME_KEY) || ''; } catch (e) { return ''; }
+  });
+  const fileRef = useRef(null);
+  const closeRef = useRef(null);
+  // Lazy: getVisitorId touches localStorage, and useRef(fn()) would re-run it
+  // on every render only to throw the result away.
+  const meRef = useRef(null);
+  if (meRef.current === null) meRef.current = getVisitorId();
+  const me = meRef;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Settled, not all: a failed vote read shouldn't hide images that loaded
+      // fine. Scores missing is a much better degraded state than a blank page.
+      const [imgs, vs] = await Promise.allSettled([loadGalleryImages(), loadGalleryVotes()]);
+      if (cancelled) return;
+      if (imgs.status === 'fulfilled') {
+        setImages(imgs.value);
+        setLoadError('');
+      } else {
+        setLoadError(String((imgs.reason && imgs.reason.message) || imgs.reason));
+      }
+      if (vs.status === 'fulfilled') setVotes(vs.value);
+      else console.error('Gallery votes failed to load', vs.reason);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Escape closes the full-size view. Bound only while it's open.
+  useEffect(() => {
+    if (!lightbox) return undefined;
+    const onKey = e => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    // Move focus into the dialog, otherwise a keyboard user is left tabbing
+    // through the page hidden behind the backdrop.
+    const prev = document.activeElement;
+    if (closeRef.current) closeRef.current.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (prev && prev.focus) prev.focus();
+    };
+  }, [lightbox]);
+
+  // Arming delay on the confirm button. Without it, the second click of an
+  // ordinary double-click on "Remove" lands on the "Delete for good" button
+  // that just appeared under the cursor -- an unrecoverable delete from one
+  // impatient gesture.
+  useEffect(() => {
+    if (!confirmDelete) { setConfirmArmed(false); return undefined; }
+    setConfirmArmed(false);
+    const t = setTimeout(() => setConfirmArmed(true), 450);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
+  const tally = {};
+  for (const v of votes) {
+    if (!v || !v.imageId) continue;
+    const t = tally[v.imageId] || (tally[v.imageId] = { up: 0, down: 0, mine: 0 });
+    if (v.vote > 0) t.up += 1;
+    else if (v.vote < 0) t.down += 1;
+    if (v.voterId === me.current) t.mine = v.vote;
+  }
+  const scoreOf = id => {
+    const t = tally[id];
+    return t ? t.up - t.down : 0;
+  };
+
+  // Highest ranked first; newest breaks ties so a fresh upload with no votes
+  // doesn't get buried under equally-unvoted older ones.
+  const ordered = [...images].sort((a, b) => {
+    const d = scoreOf(b.id) - scoreOf(a.id);
+    if (d !== 0) return d;
+    return String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || ''));
+  });
+
+  const handleFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploading(true);
+    setUploadError('');
+    try { localStorage.setItem(UPLOADER_NAME_KEY, name.trim()); } catch (e) {}
+
+    const failures = [];
+    for (const file of files) {
+      try {
+        const rec = await uploadGalleryImage(file, { uploaderName: name, voterId: me.current });
+        setImages(prev => [...prev, rec]);
+      } catch (e) {
+        failures.push(`${file.name}: ${e.message || e}`);
+      }
+    }
+    if (failures.length) setUploadError(failures.join(' — '));
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  // One vote in flight at a time across the whole grid. Two things need this:
+  // a second click can't land on a different card after the list re-sorts under
+  // the cursor, and two writes to the same key can't be serviced out of order
+  // (upsert-then-delete arriving as delete-then-upsert leaves a phantom vote).
+  const castVote = async (image, direction) => {
+    if (voting) return;
+    const current = (tally[image.id] && tally[image.id].mine) || 0;
+    const next = current === direction ? 0 : direction;
+    const mine = me.current;
+
+    setVoting(true);
+    // Optimistic, but applied functionally and reverted surgically: restoring a
+    // whole-array snapshot would wipe out any other vote that committed while
+    // this one was in flight.
+    const mineOnly = v => v.imageId === image.id && v.voterId === mine;
+    setVotes(prev => {
+      const without = prev.filter(v => !mineOnly(v));
+      return next ? [...without, { imageId: image.id, voterId: mine, vote: next }] : without;
+    });
+
+    const ok = await setGalleryVote(image.id, mine, next);
+    if (ok) {
+      setActionError('');
+    } else {
+      setVotes(prev => {
+        const without = prev.filter(v => !mineOnly(v));
+        return current ? [...without, { imageId: image.id, voterId: mine, vote: current }] : without;
+      });
+      setActionError('Your vote could not be saved. Check your connection and try again.');
+    }
+    setVoting(false);
+  };
+
+  const removeImage = async (image) => {
+    setConfirmDelete(null);
+    setImages(prev => prev.filter(i => i.id !== image.id));
+    const ok = await deleteGalleryImage(image);
+    if (ok) {
+      setActionError('');
+    } else {
+      // Put back only this image, in place -- not a snapshot, which would drop
+      // anything uploaded while the delete was in flight.
+      setImages(prev => (prev.some(i => i.id === image.id) ? prev : [...prev, image]));
+      setActionError('That image could not be deleted. Please try again.');
+    }
+  };
+
+  const canDelete = image => isAdmin || (image.uploadedBy && image.uploadedBy === me.current);
+
+  return (
+    <div style={{ marginTop: 44 }}>
+      <h2 className="ev-gallery-h">Camp Gallery</h2>
+      <p className="ev-section-sub" style={{ marginBottom: 20 }}>
+        Logos, flyers, signage, anything camp. Post what you've got and vote on the rest —
+        best-ranked rises to the top.
+      </p>
+
+      <div className="ev-gallery-upload">
+        <input
+          className="ev-input"
+          placeholder="Your name (optional)"
+          value={name}
+          maxLength={60}
+          onChange={e => setName(e.target.value)}
+          style={{ maxWidth: 240 }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={GALLERY_ACCEPT}
+          multiple
+          style={{ display: 'none' }}
+          onChange={e => handleFiles(e.target.files)}
+        />
+        <button
+          className="ev-btn ev-btn-primary"
+          disabled={uploading}
+          onClick={() => fileRef.current && fileRef.current.click()}
+        >
+          {uploading ? 'Uploading…' : 'Add image'}
+        </button>
+        <span style={{ color: '#6B5749', fontSize: 12 }}>
+          Up to {GALLERY_MAX_BYTES / 1048576}MB each. Your original is kept at full quality.
+        </span>
+      </div>
+
+      {uploadError && (
+        <div className="ev-gallery-alert" role="alert">
+          {uploadError}
+          <button className="ev-gallery-dismiss" onClick={() => setUploadError('')} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="ev-gallery-alert" role="alert">
+          {actionError}
+          <button className="ev-gallery-dismiss" onClick={() => setActionError('')} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
+      {loading && <p style={{ color: '#6B5749', fontSize: 14 }}>Loading the gallery…</p>}
+
+      {!loading && loadError && (
+        <div className="ev-gallery-alert">{loadError}</div>
+      )}
+
+      {!loading && !loadError && ordered.length === 0 && (
+        <p style={{ color: '#6B5749', fontSize: 14 }}>
+          Nothing here yet. Be the first to post something.
+        </p>
+      )}
+
+      <div className="ev-gallery-grid">
+        {ordered.map(image => {
+          const t = tally[image.id] || { up: 0, down: 0, mine: 0 };
+          const src = galleryPublicUrl(image.displayPath || image.originalPath);
+          const full = galleryPublicUrl(image.originalPath);
+          return (
+            <div key={image.id} className="ev-gallery-card">
+              <button
+                className="ev-gallery-shot"
+                onClick={() => setLightbox({ ...image, full })}
+                title="View full size"
+              >
+                <img src={src} alt={image.name ? `Posted by ${image.name}` : 'Camp gallery image'} loading="lazy" />
+              </button>
+
+              <div className="ev-gallery-meta">
+                <div className="ev-gallery-by">
+                  {image.name ? image.name : 'Anonymous'}
+                </div>
+
+                <div className="ev-gallery-votes">
+                  <button
+                    className={`ev-vote${t.mine > 0 ? ' active' : ''}`}
+                    onClick={() => castVote(image, 1)}
+                    disabled={voting}
+                    aria-label={`Thumbs up, ${t.up} ${t.up === 1 ? 'vote' : 'votes'}`}
+                    aria-pressed={t.mine > 0}
+                  >
+                    ▲ <span>{t.up}</span>
+                  </button>
+                  <span className="ev-gallery-score">
+                    <span className="ev-sr-only">Net score </span>{scoreOf(image.id)}
+                  </span>
+                  <button
+                    className={`ev-vote${t.mine < 0 ? ' active down' : ''}`}
+                    onClick={() => castVote(image, -1)}
+                    disabled={voting}
+                    aria-label={`Thumbs down, ${t.down} ${t.down === 1 ? 'vote' : 'votes'}`}
+                    aria-pressed={t.mine < 0}
+                  >
+                    ▼ <span>{t.down}</span>
+                  </button>
+                </div>
+              </div>
+
+              {canDelete(image) && (
+                <div className="ev-gallery-actions">
+                  {confirmDelete === image.id ? (
+                    <>
+                      {/* Cancel first, so the safe button is the one sitting
+                          where "Remove" was. The destructive button is also
+                          disabled for a beat -- see the arming effect above. */}
+                      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        className="ev-btn ev-btn-ghost ev-btn-small ev-gallery-danger"
+                        onClick={() => removeImage(image)}
+                        disabled={!confirmArmed}
+                      >
+                        Delete for good
+                      </button>
+                    </>
+                  ) : (
+                    <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(image.id)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {lightbox && (
+        <div className="ev-modal-backdrop" onClick={() => setLightbox(null)}>
+          <div
+            className="ev-gallery-lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={lightbox.name ? `Image posted by ${lightbox.name}` : 'Camp gallery image'}
+            onClick={e => e.stopPropagation()}
+          >
+            <img src={lightbox.full} alt={lightbox.name ? `Posted by ${lightbox.name}` : 'Camp gallery image'} />
+            <div className="ev-gallery-lightbox-bar">
+              <span>
+                {lightbox.name ? `Posted by ${lightbox.name}` : 'Anonymous'}
+                {lightbox.width ? ` · ${lightbox.width}×${lightbox.height}` : ''}
+                {lightbox.bytes ? ` · ${(lightbox.bytes / 1048576).toFixed(1)}MB` : ''}
+              </span>
+              <span style={{ display: 'flex', gap: 8 }}>
+                <a
+                  className="ev-btn ev-btn-ghost ev-btn-small"
+                  href={lightbox.full}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: 'none' }}
+                >
+                  Open original
+                </a>
+                <button ref={closeRef} className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setLightbox(null)}>
+                  Close
+                </button>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResourcesPage({ resources, isAdmin }) {
   return (
     <div className="ev-page">
       <h1 className="ev-section-h">Resources</h1>
@@ -1624,6 +2088,8 @@ function ResourcesPage({ resources }) {
           </a>
         );
       })}
+
+      <CampGallery isAdmin={isAdmin} />
     </div>
   );
 }
@@ -2960,7 +3426,7 @@ export default function App() {
       {page === 'shifts' && <ShiftsPage config={config} />}
       {page === 'rideShare' && <RideSharePage />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
-      {page === 'resources' && <ResourcesPage resources={resources} />}
+      {page === 'resources' && <ResourcesPage resources={resources} isAdmin={isAdmin} />}
       {page === 'packing' && (
         <PackingPage
           items={packingItems} checks={packingChecks}

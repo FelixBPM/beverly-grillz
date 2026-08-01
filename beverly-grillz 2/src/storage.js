@@ -206,3 +206,285 @@ export async function del(key, shared) {
     console.error('Supabase delete failed for', key, e)
   }
 }
+
+// ============================================================
+// CAMP GALLERY — image uploads and up/down votes
+// ============================================================
+// Images go in a public Supabase Storage bucket, not in kv_store. A 4MB JPEG
+// base64-encoded into a jsonb column is ~5.5MB of text that every visitor
+// downloads on page load, which defeats "keep the original at full quality".
+//
+// Two objects are stored per upload:
+//   originals/<id>.<ext>  the untouched file, byte for byte as uploaded
+//   display/<id>.webp     a downscaled copy the grid actually loads
+//
+// Metadata and votes live in kv_store under separate prefixes. `gallery:` and
+// `gvote:` deliberately do not share a prefix, so a LIKE query for one cannot
+// pick up the other.
+
+const GALLERY_BUCKET = 'gallery'
+const GALLERY_PREFIX = 'gallery:'
+const GALLERY_VOTE_PREFIX = 'gvote:'
+
+export const GALLERY_MAX_BYTES = 25 * 1024 * 1024
+export const GALLERY_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
+
+// Longest edge of the copy shown in the grid. Big enough to stay crisp on a
+// retina screen at the rendered size, small enough that a dozen of them don't
+// cost a phone user their data plan.
+const GALLERY_DISPLAY_MAX_EDGE = 1400
+
+export function galleryPublicUrl(path) {
+  if (!path) return ''
+  const { data } = supabase.storage.from(GALLERY_BUCKET).getPublicUrl(path)
+  return (data && data.publicUrl) || ''
+}
+
+// The MIME type is authoritative; the filename is only a tiebreaker for the
+// jpg/jpeg spelling. Deriving from the name alone gets "flyer" (no dot) wrong --
+// split('.').pop() returns the whole name, which then looks like a valid
+// extension and produces originals/<uuid>.flyer, a file nobody's OS can open.
+const MIME_EXTENSION = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+}
+
+function fileExtension(file) {
+  const fromType = MIME_EXTENSION[String(file.type || '').toLowerCase()]
+  if (fromType) {
+    const parts = String(file.name || '').split('.')
+    const named = parts.length > 1 ? parts.pop().toLowerCase() : ''
+    // Keep the author's spelling when it means the same format.
+    if (fromType === 'jpg' && named === 'jpeg') return 'jpeg'
+    return fromType
+  }
+  const parts = String(file.name || '').split('.')
+  const named = parts.length > 1 ? parts.pop().toLowerCase() : ''
+  if (named && named.length <= 5 && /^[a-z0-9]+$/.test(named)) return named
+  return 'img'
+}
+
+// PostgREST silently truncates at db-max-rows (1000 by default) and reports no
+// error, so an over-large gallery would just start losing votes and rendering
+// wrong scores. Asking for one more than the ceiling lets the caller notice.
+const GALLERY_ROW_LIMIT = 900
+
+// Draws the image onto a canvas at reduced size. Returns null on any failure --
+// callers fall back to serving the original, which is slower but never wrong.
+async function makeDisplayCopy(file) {
+  try {
+    if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null
+
+    const bitmap = await createImageBitmap(file)
+    const { width, height } = bitmap
+    const scale = Math.min(1, GALLERY_DISPLAY_MAX_EDGE / Math.max(width, height))
+
+    // Already small enough: no point re-encoding and losing quality for nothing.
+    if (scale === 1) { bitmap.close && bitmap.close(); return { blob: null, width, height } }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(width * scale)
+    canvas.height = Math.round(height * scale)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { bitmap.close && bitmap.close(); return { blob: null, width, height } }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close && bitmap.close()
+
+    // WebP rather than JPEG: these are logos, and JPEG would both lose the
+    // alpha channel and ring badly around hard-edged lettering.
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/webp', 0.88))
+    return { blob, width, height }
+  } catch (e) {
+    console.warn('Could not build a display copy; will serve the original', e)
+    return null
+  }
+}
+
+// Uploads one image and records it. Returns the saved record, or throws with a
+// message meant to be shown to the person who tried to upload.
+export async function uploadGalleryImage(file, { uploaderName, voterId }) {
+  if (!file) throw new Error('No file selected.')
+  // Check against the same list the bucket enforces, not just "image/*".
+  // A HEIC straight off an iPhone or an AVIF screenshot is image/* but the
+  // bucket rejects it, and the server's error message is unreadable.
+  if (!MIME_EXTENSION[String(file.type || '').toLowerCase()]) {
+    throw new Error(
+      String(file.type || '').startsWith('image/')
+        ? `${file.type.split('/')[1].toUpperCase()} images aren't supported. Use JPG, PNG, WebP or GIF.`
+        : 'That file is not an image.'
+    )
+  }
+  if (file.size > GALLERY_MAX_BYTES) {
+    throw new Error(`That image is ${(file.size / 1048576).toFixed(1)}MB. The limit is ${GALLERY_MAX_BYTES / 1048576}MB.`)
+  }
+
+  const id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2))
+  const originalPath = `originals/${id}.${fileExtension(file)}`
+
+  // The original goes up exactly as it came off the camera or the designer's
+  // export. No re-encoding, no stripping.
+  const up = await supabase.storage.from(GALLERY_BUCKET).upload(originalPath, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false,
+  })
+  if (up.error) {
+    console.error('Gallery original upload failed', up.error)
+    throw new Error(describeStorageError(up.error))
+  }
+
+  let displayPath = ''
+  let width = 0
+  let height = 0
+  const copy = await makeDisplayCopy(file)
+  if (copy) {
+    width = copy.width || 0
+    height = copy.height || 0
+    if (copy.blob) {
+      const path = `display/${id}.webp`
+      const disp = await supabase.storage.from(GALLERY_BUCKET).upload(path, copy.blob, {
+        contentType: 'image/webp',
+        upsert: false,
+      })
+      // A failed display copy is not fatal -- the grid falls back to the original.
+      if (disp.error) console.warn('Gallery display copy failed; serving the original', disp.error)
+      else displayPath = path
+    }
+  }
+
+  const record = {
+    id,
+    originalPath,
+    displayPath,
+    name: String(uploaderName || '').trim().slice(0, 60),
+    uploadedBy: voterId || '',
+    uploadedAt: new Date().toISOString(),
+    bytes: file.size,
+    type: file.type || '',
+    width,
+    height,
+  }
+
+  const wrote = await save(GALLERY_PREFIX + id, record, true)
+  if (!wrote) {
+    // Don't leave an orphaned object in the bucket that nothing references.
+    await supabase.storage.from(GALLERY_BUCKET).remove([originalPath, displayPath].filter(Boolean))
+    throw new Error('The image uploaded but could not be recorded. Please try again.')
+  }
+
+  return record
+}
+
+function describeStorageError(error) {
+  const msg = String((error && error.message) || error || '')
+  if (/bucket not found/i.test(msg)) {
+    return 'The gallery storage bucket does not exist yet. An admin needs to run the gallery setup SQL in Supabase.'
+  }
+  if (/policy|permission|unauthorized|row-level/i.test(msg)) {
+    return 'Uploads are not permitted yet. An admin needs to run the gallery setup SQL in Supabase.'
+  }
+  if (/exceeded the maximum|too large|payload/i.test(msg)) {
+    return 'That image is larger than the gallery allows.'
+  }
+  return `Upload failed: ${msg || 'unknown error'}`
+}
+
+export async function loadGalleryImages() {
+  const { data, error } = await supabase
+    .from('kv_store')
+    .select('key,value')
+    .like('key', `${GALLERY_PREFIX}%`)
+    .limit(GALLERY_ROW_LIMIT)
+  if (error) throw new Error(`Could not load the gallery: ${error.message || error}`)
+  const rows = (Array.isArray(data) ? data : []).map(r => r.value).filter(Boolean)
+  if (rows.length >= GALLERY_ROW_LIMIT) {
+    console.warn(`Gallery hit the ${GALLERY_ROW_LIMIT}-image read limit; older images are not being shown.`)
+  }
+  return rows
+}
+
+// The kv_store record is what makes an image exist as far as the site is
+// concerned, so that delete decides success. The bucket objects are cleaned up
+// afterwards and a failure there is only logged: an unreferenced file is
+// invisible clutter, whereas treating it as failure would make the caller put
+// a card back on screen for an image whose record is already gone -- a card
+// that disappears again on the next reload with no explanation.
+export async function deleteGalleryImage(image) {
+  if (!image || !image.id) return false
+
+  try {
+    const { error } = await supabase.from('kv_store').delete().eq('key', GALLERY_PREFIX + image.id)
+    if (error) { console.error('Gallery record delete failed', error); return false }
+  } catch (e) {
+    console.error('Gallery record delete failed', e)
+    return false
+  }
+
+  // Votes are keyed by image, so they can be cleared with one prefix delete.
+  // Left behind they would be invisible junk that quietly reattaches if an id
+  // were ever reused.
+  //
+  // The id goes into a LIKE pattern, where % and _ are wildcards. Ids we mint
+  // are uuids, but a record's id is just a field on a row and anyone holding
+  // the anon key can write a row -- an id of "%" would turn this into
+  // "delete gvote:%|%", i.e. every vote on every image. Only run the prefix
+  // delete for ids that cannot contain a wildcard.
+  if (/^[A-Za-z0-9-]+$/.test(image.id)) {
+    try {
+      await supabase.from('kv_store').delete().like('key', `${GALLERY_VOTE_PREFIX}${image.id}|%`)
+    } catch (e) {
+      console.warn('Gallery vote cleanup failed', e)
+    }
+  } else {
+    console.warn('Skipping vote cleanup: image id contains characters that are LIKE wildcards', image.id)
+  }
+
+  const paths = [image.originalPath, image.displayPath].filter(Boolean)
+  if (paths.length) {
+    try {
+      const { error } = await supabase.storage.from(GALLERY_BUCKET).remove(paths)
+      if (error) console.warn('Gallery files left behind in the bucket', error)
+    } catch (e) {
+      console.warn('Gallery files left behind in the bucket', e)
+    }
+  }
+
+  return true
+}
+
+// ---- Votes ----
+// One row per (image, voter) rather than a counter on the image. A shared
+// counter would be a read-modify-write on every click, and two people voting
+// at the same moment would lose one of the votes -- the same bug that used to
+// eat applications.
+
+export async function loadGalleryVotes() {
+  const { data, error } = await supabase
+    .from('kv_store')
+    .select('key,value')
+    .like('key', `${GALLERY_VOTE_PREFIX}%`)
+    .limit(GALLERY_ROW_LIMIT)
+  if (error) throw new Error(`Could not load votes: ${error.message || error}`)
+  const rows = (Array.isArray(data) ? data : []).map(r => r.value).filter(Boolean)
+  if (rows.length >= GALLERY_ROW_LIMIT) {
+    console.warn(`Gallery hit the ${GALLERY_ROW_LIMIT}-vote read limit; displayed scores are incomplete.`)
+  }
+  return rows
+}
+
+// vote: 1, -1, or 0 to clear. Voting the same way twice clears it.
+export async function setGalleryVote(imageId, voterId, vote) {
+  const key = `${GALLERY_VOTE_PREFIX}${imageId}|${voterId}`
+  if (!vote) {
+    try {
+      const { error } = await supabase.from('kv_store').delete().eq('key', key)
+      if (error) { console.error('Vote clear failed', error); return false }
+      return true
+    } catch (e) {
+      console.error('Vote clear failed', e)
+      return false
+    }
+  }
+  return save(key, { imageId, voterId, vote, at: new Date().toISOString() }, true)
+}
