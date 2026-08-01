@@ -1450,6 +1450,11 @@ const SHIFTS_OPEN_LABEL = 'Thursday, August 6th @ 5pm EST';
 
 // Ride Share sheet. Google refuses to render an /edit URL inside an iframe, so
 // the embed uses the read-only htmlview and the button opens the editable sheet.
+// Where the Apps Script endpoint deposits submitted applications. Kept as a
+// constant rather than a config field so it can't be blanked out by an empty
+// value in Supabase -- the Admin panel only ever links to it, never posts.
+const APPLICATIONS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1pYKPq3w4GfX4aQchewYrYLVGSDKtG164xYJsG2zXFUs/edit';
+
 const RIDESHARE_SHEET_ID = '1lDDHilsu5es2H_3In81wK6U4fvkVvtz0d9b4MPCGHR0';
 const RIDESHARE_SHEET_VIEW_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/htmlview?gid=0`;
 const RIDESHARE_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${RIDESHARE_SHEET_ID}/edit?gid=0#gid=0`;
@@ -1856,9 +1861,16 @@ function AdminConfig({ config, updateConfig }) {
         <input className="ev-input" type="number" {...f('shiftRequirement')} />
       </div>
       <div className="ev-field">
-        <label className="ev-label">Applications Sheet URL (Google Apps Script /exec URL)</label>
+        <label className="ev-label">Applications Endpoint (Google Apps Script /exec URL)</label>
         <input className="ev-input" placeholder="https://script.google.com/macros/s/.../exec" {...f('applicationsSheet')} />
-        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>All form submissions (new applicants and returning members) will be sent here.</p>
+        <p style={{ fontSize: 12, color: '#6B5749', marginTop: 4 }}>
+          All form submissions (new applicants and returning members) get posted here. This is the
+          pipe into the spreadsheet, not the spreadsheet itself — opening it in a browser is only a
+          health check and should answer <code>{'{"ok":true…}'}</code>. To read the applications, use{' '}
+          <a href={APPLICATIONS_SHEET_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#C8956C' }}>
+            the Applications spreadsheet →
+          </a>
+        </p>
         {!String(form.applicationsSheet || '').trim() && (
           <div style={{ background: 'rgba(190,70,50,0.12)', border: '1px solid #B4503C', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
             <p style={{ margin: 0, fontSize: 12, color: '#E0A090', lineHeight: 1.5 }}>
