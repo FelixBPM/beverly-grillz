@@ -180,6 +180,8 @@ const DEFAULT_RESOURCES = [
   { id: 'r1', name: 'Camp Map', kind: 'image', url: '/d0487e7d-ae32-43e9-9b7d-d1666ed90116.jpg', description: 'Site layout & landmarks' },
   { id: 'r2', name: 'Full Schedule', kind: 'pdf', url: '#', description: 'Thursday through Sunday' },
   { id: 'r3', name: 'Production Schedule Flyer', kind: 'pdf', url: '#', description: '(under construction)' },
+  { id: 'r4', name: "Burning Man First Timer's Guide", kind: 'link', url: 'https://burningman.org/black-rock-city/preparation/first-timers-guide/', description: 'Start here if this is your first burn' },
+  { id: 'r5', name: 'Burning Man Preparation Resources', kind: 'link', url: 'https://burningman.org/black-rock-city/preparation/', description: 'Official survival, packing, and planning guides' },
 ];
 
 const DEFAULT_CALENDAR = [
@@ -2066,10 +2068,33 @@ function AdminResources({ resources, updateResources }) {
   const remove = (i) => setList(list.filter((_, j) => j !== i));
   const add = () => setList([...list, { id: 'r' + Date.now(), name: 'New file', kind: 'pdf', url: '', description: '' }]);
 
+  // Resources live in Supabase, and a saved list completely replaces the
+  // defaults in code -- so a resource added to DEFAULT_RESOURCES never appears
+  // on a site that has already saved its list once. This appends only the
+  // built-ins that are missing, matched by id, so it can't duplicate anything
+  // or resurrect something deliberately deleted twice over.
+  const missingDefaults = DEFAULT_RESOURCES.filter(d => !list.some(r => r.id === d.id));
+
   return (
     <div className="ev-admin-section">
       <h3>Resources</h3>
       <p style={{ marginTop: -10, color: '#6E6755', fontSize: 14 }}>Paste URLs to PDFs or images hosted anywhere (Dropbox, Google Drive share links, Imgur, etc.).</p>
+
+      {missingDefaults.length > 0 && (
+        <div style={{ background: 'rgba(200,149,108,0.10)', border: '1px solid #C8956C', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: '#C8956C', lineHeight: 1.5 }}>
+            {missingDefaults.length === 1 ? 'One built-in resource is' : `${missingDefaults.length} built-in resources are`}{' '}
+            missing from your saved list: {missingDefaults.map(d => d.name).join(', ')}. Your saved
+            list overrides the ones shipped in the code, so they won't show up until you add them.
+          </p>
+          <button
+            className="ev-btn ev-btn-ghost ev-btn-small"
+            onClick={() => setList([...list, ...missingDefaults])}
+          >
+            Add {missingDefaults.length === 1 ? 'it' : 'them'} to the list
+          </button>
+        </div>
+      )}
       {list.map((r, i) => (
         <div key={r.id} style={{ background: '#0F0805', border: '1px solid #2A1810', padding: 14, borderRadius: 8, marginBottom: 10 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 60px', gap: 8, marginBottom: 8 }}>
@@ -2077,6 +2102,7 @@ function AdminResources({ resources, updateResources }) {
             <select className="ev-select" value={r.kind} onChange={e => update(i, 'kind', e.target.value)}>
               <option value="pdf">PDF</option>
               <option value="image">Image</option>
+              <option value="link">Link</option>
               <option value="other">Other</option>
             </select>
             <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => remove(i)}>×</button>
