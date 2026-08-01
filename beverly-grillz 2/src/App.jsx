@@ -2594,10 +2594,14 @@ function CampNeedsPage() {
 // provides. `allow="autoplay"` passes that activation into the iframe. iOS
 // Safari ignores it, so the widget's own play button is left visible.
 
-// Add tracks here and the rotation picks them up. Full canonical URLs only --
-// on.soundcloud.com short links are not resolvable by the widget.
+// Add tracks here and the rotation picks them up. Full canonical URLs only:
+// on.soundcloud.com short links are not resolvable by the widget. Strip the
+// ?utm_source=/&si= tracking tail that SoundCloud's share button appends --
+// harmless, but it's someone's share-attribution id riding along in a URL that
+// every camper's browser then requests.
 const MUSIC_TRACKS = [
   'https://soundcloud.com/coronado_collective/102223-violet-ride-flow',
+  'https://soundcloud.com/coronado_collective/102223-from-rana-tolls-reprint',
 ];
 
 const MUSIC_DISMISS_KEY = 'ev-music-dismissed';
