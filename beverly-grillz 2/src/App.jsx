@@ -1438,7 +1438,10 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 // SHIFTS PAGE — Google Sheet embed
 // ============================================================
 
-const SHIFTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88/htmlview?gid=1492903072';
+const SHIFTS_SHEET_ID = '1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88';
+// Google refuses to render /edit URLs in an iframe, so the page embeds the
+// read-only htmlview. Leadership Links points at the editable /edit URL.
+const SHIFTS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHIFTS_SHEET_ID}/htmlview?gid=1492903072`;
 
 // Shift signups open Thursday, August 6 2026 at 5pm Eastern.
 // The -04:00 offset is deliberate: Eastern is on daylight time in August, so
@@ -2183,6 +2186,116 @@ function AdminCalendar({ calendar, updateCalendar }) {
 // ADMIN PAGE
 // ============================================================
 
+// ============================================================
+// ADMIN — Leadership Links
+// ============================================================
+// Every Google Sheet the camp runs on, in one place, so leadership doesn't
+// have to dig through the site or their inbox to find one. These are plain
+// constants rather than editable config: an accidental blank save in the
+// Admin form shouldn't be able to lose the budget link.
+
+const LEADERSHIP_LINK_GROUPS = [
+  {
+    heading: 'Applications',
+    links: [
+      {
+        name: 'Application Submissions',
+        note: 'Every submitted application lands here, one row each, on the Applications tab.',
+        url: APPLICATIONS_SHEET_URL,
+      },
+    ],
+  },
+  {
+    heading: 'Sheets the site uses',
+    links: [
+      {
+        name: 'Shift Sign-ups',
+        note: 'Embedded on the Shifts tab.',
+        url: `https://docs.google.com/spreadsheets/d/${SHIFTS_SHEET_ID}/edit?gid=1492903072#gid=1492903072`,
+      },
+      {
+        name: 'Ride Share',
+        note: 'Embedded on the Ride Share tab.',
+        url: RIDESHARE_SHEET_EDIT_URL,
+      },
+      {
+        name: 'Packing List',
+        note: 'The source for the Packing tab.',
+        url: PACKING_SHEET_URL,
+      },
+    ],
+  },
+  {
+    heading: 'Camp operations',
+    links: [
+      {
+        name: '2026 Budget',
+        url: 'https://docs.google.com/spreadsheets/d/16tBDO8ivHrvwdmP3CQwB5aeEz32UbsE_A8FcmbhjYuo/edit?gid=73976039#gid=73976039',
+      },
+      {
+        name: '2026 Master List — Camper and Contact Info',
+        note: 'Link not set yet.',
+        url: '',
+      },
+      {
+        name: '2026 Food Program Overview',
+        url: 'https://docs.google.com/spreadsheets/d/1u9m6q2x_SuHvhRwYYoMkipx3do0tBmI5XK-w_ra9JKA/edit?gid=816529996#gid=816529996',
+      },
+    ],
+  },
+];
+
+function AdminLinks() {
+  return (
+    <div>
+      <p className="ev-section-sub" style={{ marginBottom: 24 }}>
+        Every sheet the camp runs on. All of these open in a new tab.
+      </p>
+
+      {LEADERSHIP_LINK_GROUPS.map(group => (
+        <div key={group.heading} style={{ marginBottom: 30 }}>
+          <h3 style={{ marginBottom: 14 }}>{group.heading}</h3>
+
+          {group.links.map(link => (
+            <div
+              key={link.name}
+              style={{
+                borderTop: '1px solid #2A1810',
+                padding: '14px 0',
+              }}
+            >
+              <div style={{ color: '#F0E0D0', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                {link.name}
+              </div>
+              {link.note && (
+                <div style={{ color: '#6B5749', fontSize: 12, marginBottom: 6 }}>{link.note}</div>
+              )}
+              {link.url ? (
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#C8956C',
+                    fontSize: 13,
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {link.url}
+                </a>
+              ) : (
+                <div style={{ color: '#8B6F5C', fontSize: 13, fontStyle: 'italic' }}>
+                  Send Claude the URL and it'll go here.
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AdminPage({ config, shifts, resources, packingItems, applications, applicationsError, onDeleteApplication, calendar, updateConfig, updateShifts, updateResources, updatePacking, updateCalendar, onLogout }) {
   const [tab, setTab] = useState('config');
 
@@ -2193,6 +2306,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, appl
     { id: 'resources', label: 'Resources' },
     { id: 'calendar', label: 'Calendar' },
     { id: 'applications', label: `Applications (${applications.length})` },
+    { id: 'links', label: 'Leadership Links' },
   ];
 
   return (
@@ -2214,6 +2328,7 @@ function AdminPage({ config, shifts, resources, packingItems, applications, appl
       {tab === 'resources' && <AdminResources resources={resources} updateResources={updateResources} />}
       {tab === 'calendar' && <AdminCalendar calendar={calendar} updateCalendar={updateCalendar} />}
       {tab === 'applications' && <AdminApplications applications={applications} applicationsError={applicationsError} onDeleteApplication={onDeleteApplication} />}
+      {tab === 'links' && <AdminLinks />}
     </div>
   );
 }
