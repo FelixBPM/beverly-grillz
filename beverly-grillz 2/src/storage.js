@@ -279,6 +279,17 @@ async function makeDisplayCopy(file) {
 
     const bitmap = await createImageBitmap(file)
     const { width, height } = bitmap
+
+    // A canvas holds one frame, so re-encoding an animated GIF would silently
+    // turn it into a still -- and only for GIFs above the size threshold, so
+    // whether your animation survived would depend on its pixel dimensions.
+    // Serve GIFs as-is instead: consistently animated, at the cost of the
+    // original's file size.
+    if (String(file.type || '').toLowerCase() === 'image/gif') {
+      bitmap.close && bitmap.close()
+      return { blob: null, width, height }
+    }
+
     const scale = Math.min(1, GALLERY_DISPLAY_MAX_EDGE / Math.max(width, height))
 
     // Already small enough: no point re-encoding and losing quality for nothing.

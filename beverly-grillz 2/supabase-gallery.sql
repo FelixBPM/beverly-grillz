@@ -4,8 +4,9 @@
 -- Run this ONCE in your Supabase project's SQL Editor.
 -- Dashboard → SQL Editor → New query → paste this → Run.
 --
--- Until this runs, the gallery on the Resources tab will show an
--- "uploads aren't set up yet" message instead of accepting files.
+-- Until this runs, the gallery on the Resources tab still renders (it reads
+-- its metadata from kv_store, which already exists) -- but picking a file
+-- fails with "the gallery storage bucket does not exist yet".
 --
 -- What it does: creates a public bucket called "gallery" and allows the
 -- site to read, add, and remove images in it. Image metadata and votes
