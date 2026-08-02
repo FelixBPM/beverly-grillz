@@ -467,22 +467,30 @@ const CSS = `
   @keyframes ev-splay-c { 0% { transform: rotate(0deg); } 25% { transform: rotate(-36deg); } 60% { transform: rotate(-26deg); } 100% { transform: rotate(-40deg); } }
   @keyframes ev-splay-d { 0% { transform: rotate(0deg); } 25% { transform: rotate(-25deg); } 60% { transform: rotate(-17deg); } 100% { transform: rotate(-29deg); } }
 
-  /* The Apply button stays orange and just loses its label, then darkens in
-     step with the fall -- orange, to burnt orange, to the page background --
-     so it has become a hole in the page exactly as he drops through it.
+  /* The Apply button stays orange and just loses its label, then deepens in
+     step with the fall. It settles at a burnt orange rather than going to the
+     page background -- the depth now comes from the inset shadow, not from
+     draining the colour out, so it still reads as a hole he drops into while
+     staying recognisably the orange button.
      Timed to match ev-fall-through (1.4s). */
   @keyframes ev-btn-swallow {
     0%   { background: linear-gradient(135deg, #D4894E, #C06830); box-shadow: none; }
     18%  { background: linear-gradient(135deg, #D4894E, #C06830); box-shadow: none; }
-    45%  { background: linear-gradient(135deg, #8A5228, #6B3C18); box-shadow: inset 0 6px 14px rgba(0, 0, 0, .45); }
-    70%  { background: linear-gradient(135deg, #4A2A10, #331B0A); box-shadow: inset 0 9px 20px rgba(0, 0, 0, .7); }
-    100% { background: #100804; box-shadow: inset 0 12px 26px rgba(0, 0, 0, .9); }
+    45%  { background: linear-gradient(135deg, #CD8248, #B66230); box-shadow: inset 0 5px 12px rgba(0, 0, 0, .18); }
+    70%  { background: linear-gradient(135deg, #C67C43, #AE5B2A); box-shadow: inset 0 7px 16px rgba(0, 0, 0, .26); }
+    100% { background: linear-gradient(135deg, #BE7540, #A45425); box-shadow: inset 0 9px 20px rgba(0, 0, 0, .32); }
   }
   .ev-btn-swallow {
     color: transparent !important;
     border-color: transparent !important;
     animation: ev-btn-swallow 1.4s ease-in forwards;
     cursor: default;
+    /* The button is disabled during the fall so it can't be clicked twice, and
+       .ev-btn:disabled dims it to 40%. Over a near-black page that washed the
+       orange out to a muddy brown no matter what the keyframes said -- the
+       colour below was never the thing making it dark. Disabled here means
+       "busy", not "unavailable", so it should look it. */
+    opacity: 1 !important;
   }
 
   @media (prefers-reduced-motion: reduce) {
