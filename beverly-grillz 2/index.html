@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0F0805" />
     <title>Beverly Grillz</title>
-    <!-- SVG first for browsers that take it (stays sharp at any size); the .ico
-         is the fallback, and is also what a browser fetches from /favicon.ico
-         without being told to. -->
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- The camp B. Purpose-built at each size rather than downscaled from one
+         image: at 16px the padding and corner radius have to be tighter or the
+         letter loses most of its pixel budget to empty margin. The .ico is the
+         fallback and is also what a browser fetches from /favicon.ico without
+         being told to. -->
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="description" content="Beverly Grillz — Burning Man 2026 camp hub: applications, shifts, packing and camp info." />
