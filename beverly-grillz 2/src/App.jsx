@@ -1541,8 +1541,11 @@ function UnifiedApplyPage({ config, onContinueToAgreements }) {
 
 const SHIFTS_SHEET_ID = '1Y8iUF1ldAAffelAsuY0Y9pNitn38nIrKVOUijq7ON88';
 // Google refuses to render /edit URLs in an iframe, so the page embeds the
-// read-only htmlview. Leadership Links points at the editable /edit URL.
+// read-only htmlview. Campers have to reach the editable sheet to claim a
+// shift, so the button on the Shifts tab opens SHIFTS_SHEET_EDIT_URL -- the
+// same read-only-embed / editable-link split the Ride Share tab uses.
 const SHIFTS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHIFTS_SHEET_ID}/htmlview?gid=1492903072`;
+const SHIFTS_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${SHIFTS_SHEET_ID}/edit?usp=sharing&gid=1492903072#gid=1492903072`;
 
 // Shift signups open Thursday, August 6 2026 at 5pm Eastern.
 // The -04:00 offset is deliberate: Eastern is on daylight time in August, so
@@ -1610,17 +1613,23 @@ function ShiftsPage({ config }) {
       <h1 className="ev-section-h">Shifts</h1>
       <p className="ev-section-sub">Sign up for your shifts using the live spreadsheet below. You must complete at least 3 shifts.</p>
 
-      <div style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ background: '#0F0805', border: '1px solid #2A1810', borderRadius: 12, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 20 }}>📋</span>
-        <div>
+        <div style={{ flex: 1, minWidth: 220 }}>
           <p style={{ fontSize: 14, color: '#FBF0E0', fontWeight: 500, marginBottom: 2 }}>Live Shifts Spreadsheet</p>
           <p style={{ fontSize: 13, color: '#6B5749' }}>
-            The sheet updates in real time. Can't see it?{' '}
-            <a href={SHIFTS_SHEET_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#C8956C', textDecoration: 'underline' }}>
-              Open in a new tab →
-            </a>
+            The view below is read-only and updates in real time. To claim your shifts, open the sheet directly.
           </p>
         </div>
+        <a
+          className="ev-btn ev-btn-primary ev-btn-small"
+          href={SHIFTS_SHEET_EDIT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+        >
+          Open the sheet →
+        </a>
       </div>
 
       <iframe
@@ -2708,7 +2717,7 @@ const LEADERSHIP_LINK_GROUPS = [
       {
         name: 'Shift Sign-ups',
         note: 'Embedded on the Shifts tab.',
-        url: `https://docs.google.com/spreadsheets/d/${SHIFTS_SHEET_ID}/edit?gid=1492903072#gid=1492903072`,
+        url: SHIFTS_SHEET_EDIT_URL,
       },
       {
         name: 'Ride Share',
