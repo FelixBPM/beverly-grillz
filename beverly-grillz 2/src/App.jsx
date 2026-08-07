@@ -598,8 +598,26 @@ const CSS = `
   }
   .ev-gallery-upload {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-    background: #0F0805; border: 1px solid #2A1810; border-radius: 10px;
+    background: #0F0805; border: 1px dashed #2A1810; border-radius: 10px;
     padding: 14px; margin-bottom: 16px;
+  }
+  .ev-gallery-hint { font-size: 12.5px; color: #6B5749; line-height: 1.4; }
+  /* Anchors the drag overlay, which covers the upload bar and the grid both. */
+  .ev-gallery-drop { position: relative; }
+  .ev-gallery-drop-veil {
+    position: absolute; inset: -10px; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 20px;
+    background: rgba(16,8,4,.86);
+    border: 2px dashed #C8956C; border-radius: 14px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 24px; letter-spacing: .02em; color: #C8956C;
+    /* The veil must never be the drop target itself. If it swallowed the event
+       the drop would land on an element that is about to unmount. */
+    pointer-events: none;
+  }
+  .ev-gallery-progress {
+    font-size: 13px; color: #C8956C; margin-bottom: 16px; line-height: 1.5;
   }
   .ev-gallery-alert {
     background: rgba(190, 70, 50, .12); border: 1px solid #B4503C;
@@ -1723,6 +1741,18 @@ function getVisitorId() {
   }
 }
 
+// A drag carrying selected text or a link is not an upload. Checking the types
+// list keeps the dropzone from lighting up when someone drags a sentence across
+// the page, and keeps the window-level guard from eating ordinary drags.
+function dragHasFiles(e) {
+  const dt = e.dataTransfer;
+  if (!dt) return false;
+  // Safari leaves types empty during dragover for security; assume files rather
+  // than refusing the drop outright, since the drop handler re-checks anyway.
+  if (!dt.types || !dt.types.length) return true;
+  return Array.from(dt.types).indexOf('Files') !== -1;
+}
+
 function CampGallery({ isAdmin }) {
   const [images, setImages] = useState([]);
   const [votes, setVotes] = useState([]);
@@ -1730,6 +1760,8 @@ function CampGallery({ isAdmin }) {
   const [loadError, setLoadError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [progress, setProgress] = useState('');
   const [actionError, setActionError] = useState('');
   const [voting, setVoting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -1740,6 +1772,10 @@ function CampGallery({ isAdmin }) {
   });
   const fileRef = useRef(null);
   const closeRef = useRef(null);
+  // Drag events fire again for every element the cursor crosses, so a bare
+  // enter/leave pair strobes as it passes over the cards inside the zone.
+  // Counting enters against leaves is what makes the highlight hold steady.
+  const dragDepth = useRef(0);
   // Lazy: getVisitorId touches localStorage, and useRef(fn()) would re-run it
   // on every render only to throw the result away.
   const meRef = useRef(null);
@@ -1821,17 +1857,88 @@ function CampGallery({ isAdmin }) {
     try { localStorage.setItem(UPLOADER_NAME_KEY, name.trim()); } catch (e) {}
 
     const failures = [];
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Transcoding a 12-megapixel HEIC takes a couple of seconds, and a drop
+      // of six of them takes most of a minute. A bare "Uploading…" for that
+      // long reads as a hang, so say which file and which stage.
+      const prefix = files.length > 1 ? `${i + 1} of ${files.length} — ` : '';
+      setProgress(`${prefix}uploading ${file.name}…`);
       try {
-        const rec = await uploadGalleryImage(file, { uploaderName: name, voterId: me.current });
+        const rec = await uploadGalleryImage(file, {
+          uploaderName: name,
+          voterId: me.current,
+          onStage: stage => setProgress(
+            stage === 'converting'
+              ? `${prefix}converting ${file.name} from HEIC…`
+              : `${prefix}uploading ${file.name}…`
+          ),
+        });
         setImages(prev => [...prev, rec]);
       } catch (e) {
         failures.push(`${file.name}: ${e.message || e}`);
       }
     }
     if (failures.length) setUploadError(failures.join(' — '));
+    setProgress('');
     setUploading(false);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  // Dropping a file anywhere outside the zone would otherwise make the browser
+  // navigate to it, throwing away the page and anything typed into it.
+  useEffect(() => {
+    const swallow = e => { if (dragHasFiles(e)) e.preventDefault(); };
+    window.addEventListener('dragover', swallow);
+    window.addEventListener('drop', swallow);
+    return () => {
+      window.removeEventListener('dragover', swallow);
+      window.removeEventListener('drop', swallow);
+    };
+  }, []);
+
+  // Cmd/Ctrl+V a screenshot straight onto the page. Bound to the document
+  // because a plain div can't hold focus, and skipped while the caret is in a
+  // text field so pasting your name into the name box doesn't upload anything.
+  useEffect(() => {
+    const onPaste = e => {
+      const t = e.target;
+      const tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+      const pasted = e.clipboardData && e.clipboardData.files;
+      if (pasted && pasted.length) {
+        e.preventDefault();
+        handleFiles(pasted);
+      }
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [name]);
+
+  const onDragEnter = e => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+  const onDragOver = e => {
+    if (!dragHasFiles(e)) return;
+    // Both of these are required: without preventDefault Chrome refuses the
+    // drop, and without dropEffect it shows a "move" cursor over the zone.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = e => {
+    if (!dragHasFiles(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+  const onDrop = e => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    const dropped = e.dataTransfer && e.dataTransfer.files;
+    if (dropped && dropped.length) handleFiles(dropped);
   };
 
   // One vote in flight at a time across the whole grid. Two things need this:
@@ -1891,131 +1998,152 @@ function CampGallery({ isAdmin }) {
         best-ranked rises to the top.
       </p>
 
-      <div className="ev-gallery-upload">
-        <input
-          className="ev-input"
-          placeholder="Your name (optional)"
-          value={name}
-          maxLength={60}
-          onChange={e => setName(e.target.value)}
-          style={{ maxWidth: 240 }}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept={GALLERY_ACCEPT}
-          multiple
-          style={{ display: 'none' }}
-          onChange={e => handleFiles(e.target.files)}
-        />
-        <button
-          className="ev-btn ev-btn-primary"
-          disabled={uploading}
-          onClick={() => fileRef.current && fileRef.current.click()}
-        >
-          {uploading ? 'Uploading…' : 'Add image'}
-        </button>
-      </div>
+      <div
+        className="ev-gallery-drop"
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {dragging && (
+          <div className="ev-gallery-drop-veil">Drop your images here</div>
+        )}
 
-      {uploadError && (
-        <div className="ev-gallery-alert" role="alert">
-          {uploadError}
-          <button className="ev-gallery-dismiss" onClick={() => setUploadError('')} aria-label="Dismiss">×</button>
+        <div className="ev-gallery-upload">
+          <input
+            className="ev-input"
+            placeholder="Your name (optional)"
+            value={name}
+            maxLength={60}
+            onChange={e => setName(e.target.value)}
+            style={{ maxWidth: 240 }}
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept={GALLERY_ACCEPT}
+            multiple
+            style={{ display: 'none' }}
+            onChange={e => handleFiles(e.target.files)}
+          />
+          <button
+            className="ev-btn ev-btn-primary"
+            disabled={uploading}
+            onClick={() => fileRef.current && fileRef.current.click()}
+          >
+            {uploading ? 'Uploading…' : 'Add image'}
+          </button>
+          <span className="ev-gallery-hint">
+            …or drag images anywhere onto this box, or just paste one.
+            <br />
+            iPhone HEIC photos are converted automatically.
+          </span>
         </div>
-      )}
 
-      {actionError && (
-        <div className="ev-gallery-alert" role="alert">
-          {actionError}
-          <button className="ev-gallery-dismiss" onClick={() => setActionError('')} aria-label="Dismiss">×</button>
-        </div>
-      )}
+        {progress && (
+          <div className="ev-gallery-progress" role="status" aria-live="polite">{progress}</div>
+        )}
 
-      {loading && <p style={{ color: '#6B5749', fontSize: 14 }}>Loading the gallery…</p>}
+        {uploadError && (
+          <div className="ev-gallery-alert" role="alert">
+            {uploadError}
+            <button className="ev-gallery-dismiss" onClick={() => setUploadError('')} aria-label="Dismiss">×</button>
+          </div>
+        )}
 
-      {!loading && loadError && (
-        <div className="ev-gallery-alert">{loadError}</div>
-      )}
+        {actionError && (
+          <div className="ev-gallery-alert" role="alert">
+            {actionError}
+            <button className="ev-gallery-dismiss" onClick={() => setActionError('')} aria-label="Dismiss">×</button>
+          </div>
+        )}
 
-      {!loading && !loadError && ordered.length === 0 && (
-        <p style={{ color: '#6B5749', fontSize: 14 }}>
-          Nothing here yet. Be the first to post something.
-        </p>
-      )}
+        {loading && <p style={{ color: '#6B5749', fontSize: 14 }}>Loading the gallery…</p>}
 
-      <div className="ev-gallery-grid">
-        {ordered.map(image => {
-          const t = tally[image.id] || { up: 0, down: 0, mine: 0 };
-          const src = galleryPublicUrl(image.displayPath || image.originalPath);
-          const full = galleryPublicUrl(image.originalPath);
-          return (
-            <div key={image.id} className="ev-gallery-card">
-              <button
-                className="ev-gallery-shot"
-                onClick={() => setLightbox({ ...image, full })}
-                title="View full size"
-              >
-                <img src={src} alt={image.name ? `Posted by ${image.name}` : 'Camp gallery image'} loading="lazy" />
-              </button>
+        {!loading && loadError && (
+          <div className="ev-gallery-alert">{loadError}</div>
+        )}
 
-              <div className="ev-gallery-meta">
-                <div className="ev-gallery-by">
-                  {image.name ? image.name : 'Anonymous'}
-                </div>
+        {!loading && !loadError && ordered.length === 0 && (
+          <p style={{ color: '#6B5749', fontSize: 14 }}>
+            Nothing here yet. Be the first to post something.
+          </p>
+        )}
 
-                <div className="ev-gallery-votes">
-                  <button
-                    className={`ev-vote${t.mine > 0 ? ' active' : ''}`}
-                    onClick={() => castVote(image, 1)}
-                    disabled={voting}
-                    aria-label={`Thumbs up, ${t.up} ${t.up === 1 ? 'vote' : 'votes'}`}
-                    aria-pressed={t.mine > 0}
-                  >
-                    ▲ <span>{t.up}</span>
-                  </button>
-                  <span className="ev-gallery-score">
-                    <span className="ev-sr-only">Net score </span>{scoreOf(image.id)}
-                  </span>
-                  <button
-                    className={`ev-vote${t.mine < 0 ? ' active down' : ''}`}
-                    onClick={() => castVote(image, -1)}
-                    disabled={voting}
-                    aria-label={`Thumbs down, ${t.down} ${t.down === 1 ? 'vote' : 'votes'}`}
-                    aria-pressed={t.mine < 0}
-                  >
-                    ▼ <span>{t.down}</span>
-                  </button>
-                </div>
-              </div>
+        <div className="ev-gallery-grid">
+          {ordered.map(image => {
+            const t = tally[image.id] || { up: 0, down: 0, mine: 0 };
+            const src = galleryPublicUrl(image.displayPath || image.originalPath);
+            const full = galleryPublicUrl(image.originalPath);
+            return (
+              <div key={image.id} className="ev-gallery-card">
+                <button
+                  className="ev-gallery-shot"
+                  onClick={() => setLightbox({ ...image, full, view: src })}
+                  title="View full size"
+                >
+                  <img src={src} alt={image.name ? `Posted by ${image.name}` : 'Camp gallery image'} loading="lazy" />
+                </button>
 
-              {canDelete(image) && (
-                <div className="ev-gallery-actions">
-                  {confirmDelete === image.id ? (
-                    <>
-                      {/* Cancel first, so the safe button is the one sitting
-                          where "Remove" was. The destructive button is also
-                          disabled for a beat -- see the arming effect above. */}
-                      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(null)}>
-                        Cancel
-                      </button>
-                      <button
-                        className="ev-btn ev-btn-ghost ev-btn-small ev-gallery-danger"
-                        onClick={() => removeImage(image)}
-                        disabled={!confirmArmed}
-                      >
-                        Delete for good
-                      </button>
-                    </>
-                  ) : (
-                    <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(image.id)}>
-                      Remove
+                <div className="ev-gallery-meta">
+                  <div className="ev-gallery-by">
+                    {image.name ? image.name : 'Anonymous'}
+                  </div>
+
+                  <div className="ev-gallery-votes">
+                    <button
+                      className={`ev-vote${t.mine > 0 ? ' active' : ''}`}
+                      onClick={() => castVote(image, 1)}
+                      disabled={voting}
+                      aria-label={`Thumbs up, ${t.up} ${t.up === 1 ? 'vote' : 'votes'}`}
+                      aria-pressed={t.mine > 0}
+                    >
+                      ▲ <span>{t.up}</span>
                     </button>
-                  )}
+                    <span className="ev-gallery-score">
+                      <span className="ev-sr-only">Net score </span>{scoreOf(image.id)}
+                    </span>
+                    <button
+                      className={`ev-vote${t.mine < 0 ? ' active down' : ''}`}
+                      onClick={() => castVote(image, -1)}
+                      disabled={voting}
+                      aria-label={`Thumbs down, ${t.down} ${t.down === 1 ? 'vote' : 'votes'}`}
+                      aria-pressed={t.mine < 0}
+                    >
+                      ▼ <span>{t.down}</span>
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
+
+                {canDelete(image) && (
+                  <div className="ev-gallery-actions">
+                    {confirmDelete === image.id ? (
+                      <>
+                        {/* Cancel first, so the safe button is the one sitting
+                            where "Remove" was. The destructive button is also
+                            disabled for a beat -- see the arming effect above. */}
+                        <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(null)}>
+                          Cancel
+                        </button>
+                        <button
+                          className="ev-btn ev-btn-ghost ev-btn-small ev-gallery-danger"
+                          onClick={() => removeImage(image)}
+                          disabled={!confirmArmed}
+                        >
+                          Delete for good
+                        </button>
+                      </>
+                    ) : (
+                      <button className="ev-btn ev-btn-ghost ev-btn-small" onClick={() => setConfirmDelete(image.id)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {lightbox && (
@@ -2027,7 +2155,12 @@ function CampGallery({ isAdmin }) {
             aria-label={lightbox.name ? `Image posted by ${lightbox.name}` : 'Camp gallery image'}
             onClick={e => e.stopPropagation()}
           >
-            <img src={lightbox.full} alt={lightbox.name ? `Posted by ${lightbox.name}` : 'Camp gallery image'} />
+            {/* The 1400px display copy, not the original: it is already in
+                cache from the grid, it out-resolves any screen at this size,
+                and it keeps a browse through the gallery from costing a
+                full-size download per image. "Open original" below is the
+                deliberate way to get the untouched file. */}
+            <img src={lightbox.view || lightbox.full} alt={lightbox.name ? `Posted by ${lightbox.name}` : 'Camp gallery image'} />
             <div className="ev-gallery-lightbox-bar">
               <span>
                 {lightbox.name ? `Posted by ${lightbox.name}` : 'Anonymous'}

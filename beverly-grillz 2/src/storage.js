@@ -227,7 +227,11 @@ const GALLERY_PREFIX = 'gallery:'
 const GALLERY_VOTE_PREFIX = 'gvote:'
 
 export const GALLERY_MAX_BYTES = 25 * 1024 * 1024
-export const GALLERY_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
+// The `.heic,.heif` extensions are listed alongside the MIME types on purpose:
+// several browsers report an empty type for a HEIC sitting on disk, and would
+// grey it out in the file picker if the list were MIME types alone.
+export const GALLERY_ACCEPT =
+  'image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif'
 
 // Longest edge of the copy shown in the grid. Big enough to stay crisp on a
 // retina screen at the rendered size, small enough that a dozen of them don't
@@ -270,6 +274,79 @@ function fileExtension(file) {
 // error, so an over-large gallery would just start losing votes and rendering
 // wrong scores. Asking for one more than the ceiling lets the caller notice.
 const GALLERY_ROW_LIMIT = 900
+
+// ------------------------------------------------------------
+// HEIC
+// ------------------------------------------------------------
+// iPhones shoot HEIC by default. Safari can render it; Chrome, Firefox and
+// every Android browser cannot, and the storage bucket rejects the MIME type
+// outright. So a HEIC is transcoded to JPEG in the browser before it is
+// uploaded, and what lands in the bucket is an ordinary photo everyone can see.
+//
+// Quality 0.94 at full resolution: visually indistinguishable from the source,
+// and the point of keeping originals here is the picture, not the container.
+
+const HEIC_JPEG_QUALITY = 0.94
+
+const HEIC_MIME = new Set([
+  'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence',
+])
+
+// A cheap pre-check, run before the 3MB decoder is fetched. The MIME type is
+// trusted when the OS supplies one, but Chrome on Windows and most Android
+// file pickers hand over an empty type (or application/octet-stream) for a
+// .heic, so the extension is the only signal available at that point.
+function looksHeic(file) {
+  const type = String(file.type || '').toLowerCase()
+  if (HEIC_MIME.has(type)) return true
+  if (!type || type === 'application/octet-stream') {
+    return /\.(heic|heif)$/i.test(String(file.name || ''))
+  }
+  return false
+}
+
+// Returns a JPEG File for a HEIC, or the untouched file for anything else.
+// The decoder is imported dynamically so the wasm only travels to the people
+// who actually post an iPhone photo -- it is far larger than the whole app.
+async function normalizeHeic(file) {
+  if (!looksHeic(file)) return file
+
+  let heic
+  try {
+    heic = await import('heic-to')
+  } catch (e) {
+    console.error('HEIC decoder failed to load', e)
+    throw new Error('Could not load the HEIC converter. Check your connection and try again.')
+  }
+
+  // Magic bytes decide, not the filename. A JPEG that someone renamed .heic
+  // would otherwise be handed to libheif, which fails with an opaque error --
+  // and it is a file we could have accepted untouched.
+  try {
+    if (!(await heic.isHeic(file))) return file
+  } catch (e) {
+    // Undecidable: fall through and let the conversion attempt be the answer.
+  }
+
+  let blob
+  try {
+    blob = await heic.heicTo({ blob: file, type: 'image/jpeg', quality: HEIC_JPEG_QUALITY })
+  } catch (e) {
+    console.error('HEIC conversion failed', e)
+    blob = null
+  }
+  if (!blob) {
+    throw new Error(
+      'That HEIC photo could not be converted. On an iPhone, Settings → Camera → Formats → Most Compatible makes new photos upload as JPG.'
+    )
+  }
+
+  const base = String(file.name || 'photo').replace(/\.(heic|heif)$/i, '')
+  return new File([blob], `${base}.jpg`, {
+    type: 'image/jpeg',
+    lastModified: file.lastModified || Date.now(),
+  })
+}
 
 // Draws the image onto a canvas at reduced size. Returns null on any failure --
 // callers fall back to serving the original, which is slower but never wrong.
@@ -315,29 +392,41 @@ async function makeDisplayCopy(file) {
 
 // Uploads one image and records it. Returns the saved record, or throws with a
 // message meant to be shown to the person who tried to upload.
-export async function uploadGalleryImage(file, { uploaderName, voterId }) {
+export async function uploadGalleryImage(file, { uploaderName, voterId, onStage }) {
   if (!file) throw new Error('No file selected.')
-  // Check against the same list the bucket enforces, not just "image/*".
-  // A HEIC straight off an iPhone or an AVIF screenshot is image/* but the
-  // bucket rejects it, and the server's error message is unreadable.
-  if (!MIME_EXTENSION[String(file.type || '').toLowerCase()]) {
-    throw new Error(
-      String(file.type || '').startsWith('image/')
-        ? `${file.type.split('/')[1].toUpperCase()} images aren't supported. Use JPG, PNG, WebP or GIF.`
-        : 'That file is not an image.'
-    )
-  }
+
+  // Size is judged on what the person actually picked, before any conversion.
+  // A 60MB file should be refused instantly rather than after libheif has
+  // spent ten seconds decoding it into something we then reject anyway.
   if (file.size > GALLERY_MAX_BYTES) {
     throw new Error(`That image is ${(file.size / 1048576).toFixed(1)}MB. The limit is ${GALLERY_MAX_BYTES / 1048576}MB.`)
   }
 
+  // HEIC becomes JPEG here, so everything downstream -- the type check, the
+  // display copy, the bucket's allowed_mime_types -- sees a format it knows.
+  if (looksHeic(file) && onStage) onStage('converting')
+  const source = await normalizeHeic(file)
+  if (onStage) onStage('uploading')
+
+  // Check against the same list the bucket enforces, not just "image/*".
+  // An AVIF screenshot is image/* but the bucket rejects it, and the server's
+  // error message is unreadable.
+  if (!MIME_EXTENSION[String(source.type || '').toLowerCase()]) {
+    throw new Error(
+      String(source.type || '').startsWith('image/')
+        ? `${source.type.split('/')[1].toUpperCase()} images aren't supported. Use JPG, PNG, WebP or GIF.`
+        : 'That file is not an image.'
+    )
+  }
+
   const id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2))
-  const originalPath = `originals/${id}.${fileExtension(file)}`
+  const originalPath = `originals/${id}.${fileExtension(source)}`
 
   // The original goes up exactly as it came off the camera or the designer's
-  // export. No re-encoding, no stripping.
-  const up = await supabase.storage.from(GALLERY_BUCKET).upload(originalPath, file, {
-    contentType: file.type || 'application/octet-stream',
+  // export. No re-encoding, no stripping. (A HEIC is the one exception: it was
+  // transcoded above, because the alternative is a file most people can't open.)
+  const up = await supabase.storage.from(GALLERY_BUCKET).upload(originalPath, source, {
+    contentType: source.type || 'application/octet-stream',
     upsert: false,
   })
   if (up.error) {
@@ -348,7 +437,7 @@ export async function uploadGalleryImage(file, { uploaderName, voterId }) {
   let displayPath = ''
   let width = 0
   let height = 0
-  const copy = await makeDisplayCopy(file)
+  const copy = await makeDisplayCopy(source)
   if (copy) {
     width = copy.width || 0
     height = copy.height || 0
@@ -371,8 +460,8 @@ export async function uploadGalleryImage(file, { uploaderName, voterId }) {
     name: String(uploaderName || '').trim().slice(0, 60),
     uploadedBy: voterId || '',
     uploadedAt: new Date().toISOString(),
-    bytes: file.size,
-    type: file.type || '',
+    bytes: source.size,
+    type: source.type || '',
     width,
     height,
   }
