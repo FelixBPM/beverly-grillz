@@ -21,6 +21,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { load } from './storage';
+import FindIt from './FindIt';
 import {
   BM_YEAR,
   locationsReleased,
@@ -285,6 +286,10 @@ function DetailModal({ item, kind, archive, onClose }) {
             Look for: {item.landmark}
           </p>
         )}
+
+        {/* Directions live at the bottom of the record, after you have decided
+            you want to go — not competing with the description above it. */}
+        <FindIt item={item} />
 
         <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {item.url && (
