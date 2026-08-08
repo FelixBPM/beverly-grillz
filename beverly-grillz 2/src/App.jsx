@@ -6,6 +6,7 @@ import {
   GALLERY_ACCEPT,
 } from './storage';
 import PlayaDataPage from './PlayaData';
+import PrinciplesPage from './Principles';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -60,6 +61,9 @@ const DEFAULT_PACKING = [
   '## For Camp',
   '2 bottles of booze',
   '4 mixers',
+  // Gifting is one of the Ten Principles, so this earns the essential marker
+  // rather than sitting further down with the nice-to-haves.
+  '! Gifts for the playa',
 
   '## Before You Leave',
   '! Tickets. No, really — people forget them every year',
@@ -3572,6 +3576,7 @@ export default function App() {
     { id: 'home', label: 'Home' },
     { id: 'apply', label: 'Apply' },
     { id: 'campAgreements', label: 'Affirmations' },
+    { id: 'principles', label: '10 Principles' },
     { id: 'shifts', label: 'Shifts' },
     { id: 'rideShare', label: 'Ride Share' },
     { id: 'packing', label: 'Packing' },
@@ -3689,6 +3694,7 @@ export default function App() {
         />
       )}
       {page === 'campNeeds' && <CampNeedsPage />}
+      {page === 'principles' && <PrinciplesPage />}
       {page === 'admin' && (
         isAdmin
           ? <AdminPage
