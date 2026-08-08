@@ -87,6 +87,20 @@ const COLLECTIONS = [
   { kind: 'camps', path: 'camp', archive: 'camps' },
   { kind: 'art', path: 'art', archive: 'art' },
   { kind: 'events', path: 'event', archive: 'events' },
+  // Mutant vehicles (DMV-approved art cars). BMorg's published docs only list
+  // camps/art/events, and the free S3 archive has no vehicles file — but other
+  // apps built on this API do show 2026 art cars, so a live endpoint almost
+  // certainly exists under a name we cannot confirm without a key. Rather than
+  // guess once and fail, `altPaths` are tried in order and the first that
+  // answers wins. If none do, the collection is skipped and the rest of the
+  // sync proceeds normally — art cars are additive, never load-bearing.
+  {
+    kind: 'vehicles',
+    path: 'vehicle',
+    altPaths: ['mutant_vehicle', 'vehicles', 'mutantvehicle', 'art_car'],
+    archive: 'vehicles',
+    optional: true,
+  },
 ];
 
 // ------------------------------------------------------------
@@ -121,7 +135,27 @@ function norm(s) {
 // FETCH
 // ------------------------------------------------------------
 
-async function fetchCollection(path) {
+/**
+ * Try each candidate path until one answers, for collections whose endpoint
+ * name we cannot confirm. Returns { list, path } or null if all 404.
+ */
+async function fetchWithFallback(col) {
+  const candidates = [col.path, ...(col.altPaths || [])];
+  for (const p of candidates) {
+    try {
+      const list = await fetchCollection(p, { soft404: true });
+      if (list !== null) {
+        if (p !== col.path) log(`  (${col.kind} resolved to endpoint "${p}")`);
+        return { list, path: p };
+      }
+    } catch (e) {
+      warn(`  ${col.kind}: "${p}" errored — ${e.message}`);
+    }
+  }
+  return null;
+}
+
+async function fetchCollection(path, opts = {}) {
   const url = `${API_ROOT}/${path}?year=${YEAR}`;
   const res = await fetch(url, {
     headers: {
@@ -136,6 +170,8 @@ async function fetchCollection(path) {
     die(`${res.status} from ${path} — check BM_API_KEY, and confirm your key has been approved for ${YEAR} data.`);
   }
   if (res.status === 404) {
+    // soft404 lets the caller try the next candidate name instead of aborting.
+    if (opts.soft404) return null;
     die(`404 from ${url} — the endpoint path may have changed. Adjust COLLECTIONS at the top of this file.`);
   }
   if (!res.ok) {
@@ -230,6 +266,22 @@ export function slimCamp(c) {
       : [],
     location: c.location,
     location_string: c.location_string,
+  };
+}
+
+// Art cars roam — they have no placement at all, so there is nothing here for
+// the embargo to withhold. They still travel the same applyEmbargo() path as
+// everything else so there is exactly one route data can take.
+export function slimVehicle(v) {
+  return {
+    uid: v.uid,
+    name: v.name,
+    hometown: v.hometown,
+    description: clamp(v.description, 500),
+    url: v.url,
+    images: Array.isArray(v.images)
+      ? v.images.slice(0, 1).map(i => ({ thumbnail_url: i.thumbnail_url }))
+      : [],
   };
 }
 
@@ -331,6 +383,22 @@ async function main() {
 
   const raw = {};
   for (const c of COLLECTIONS) {
+    if (c.optional) {
+      // Optional collections must never break the run. The free archive has no
+      // vehicles file at all, so on archive years this simply records an empty
+      // list and the UI explains why.
+      if (isArchive) {
+        raw[c.kind] = [];
+        log(`${c.kind}: not published in the ${year} archive — skipped`);
+        continue;
+      }
+      const found = await fetchWithFallback(c);
+      raw[c.kind] = found?.list || [];
+      log(found
+        ? `fetched ${found.list.length} ${c.kind} from "${found.path}"`
+        : `${c.kind}: no endpoint responded (tried ${[c.path, ...(c.altPaths||[])].join(', ')}) — skipped`);
+      continue;
+    }
     const list = isArchive
       ? await fetchArchive(c.archive, year)
       : await fetchCollection(c.path);
@@ -358,6 +426,7 @@ async function main() {
   const camps = raw.camps.map(slimCamp);
   const art = raw.art.map(slimArt);
   const events = raw.events.map(slimEvent);
+  const vehicles = (raw.vehicles || []).map(slimVehicle);
 
   // ---- identify our own camp ----
   const ours = camps.find(c =>
@@ -392,6 +461,10 @@ async function main() {
     events: applyEmbargo('events', events, embargoAt),
     ourCamp: ours ? applyEmbargo('camps', [ours], embargoAt)[0] : null,
     ourEvents: applyEmbargo('events', ourEvents, embargoAt),
+    // 'vehicles' has no entry in RELEASE, so locationsReleased() returns true
+    // and nothing is stripped — correct, because a roaming vehicle has no
+    // address to protect.
+    vehicles: applyEmbargo('vehicles', vehicles, embargoAt),
   };
 
   // ---- last line of defence, before anything is published ----
@@ -430,6 +503,7 @@ async function main() {
   await upsert(`bm:${year}:camps`, pub.camps);
   await upsert(`bm:${year}:art`, pub.art);
   await upsert(`bm:${year}:events`, pub.events);
+  await upsert(`bm:${year}:vehicles`, pub.vehicles);
   await upsert(`bm:${year}:ourCamp`, pub.ourCamp);
   await upsert(`bm:${year}:ourEvents`, pub.ourEvents);
   await upsert(`bm:${year}:meta`, {
@@ -439,6 +513,7 @@ async function main() {
     counts: {
       camps: camps.length, art: art.length,
       events: events.length, ourEvents: ourEvents.length,
+      vehicles: vehicles.length,
     },
     released: isArchive
       ? { camps: true, art: true }
