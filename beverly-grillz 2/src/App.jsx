@@ -316,6 +316,42 @@ const CSS = `
   .ev-page { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
   .ev-page-wide { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
 
+  /* --- PACKING PAGE SIDE RAILS --- */
+  /* The app shell paints an opaque background, so the rails need their own
+     stacking context to sit above it: this makes .ev-page-packing the context,
+     and the z-index -1 rails inside it land above the shell but below the list.
+     position:relative does not affect the rails' fixed containing block, so
+     they still span the full viewport height. */
+  .ev-page-packing { position: relative; z-index: 0; }
+  /* Purely decorative: a hazy playa sunrise running down both margins of the
+     packing list. The source is a small, soft phone photo, so it is blurred and
+     faded on purpose -- shown sharp at rail height it would just read as
+     low-resolution. z-index -1 keeps it behind all page content. */
+  .ev-rail {
+    position: fixed; top: 0; bottom: 0; z-index: -1;
+    width: clamp(130px, 15vw, 300px);
+    background-image: url('/playa-sun.jpg');
+    background-size: cover; background-position: center;
+    filter: blur(4px) saturate(1.05);
+    opacity: .45;
+    pointer-events: none;
+  }
+  /* The mask fades each rail out toward the middle of the screen so the text
+     column never sits on top of busy pixels. The right rail is flipped, which
+     flips its mask with it -- so it fades inward from the right edge. */
+  .ev-rail-l {
+    left: 0;
+    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+  }
+  .ev-rail-r {
+    right: 0; transform: scaleX(-1);
+    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+  }
+  /* Narrower than this and the rails would crowd the 720px text column. */
+  @media (max-width: 1080px) { .ev-rail { display: none; } }
+
   /* --- BUTTONS --- */
   .ev-btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -793,15 +829,20 @@ const CSS = `
   }
 
   /* --- RESOURCES --- */
+  /* Deliberately tight rows: the resource list sits directly above the Camp
+     Gallery, and the gallery only pulls people in if some of it is visible
+     without scrolling. Every pixel saved here lifts the gallery up the page. */
   .ev-resource-card {
-    background: #0F0805; border: 1px solid #1E100A; border-radius: 10px;
-    padding: 16px 20px; margin-bottom: 10px;
+    background: #0F0805; border: 1px solid #1E100A; border-radius: 8px;
+    padding: 9px 16px; margin-bottom: 5px;
     display: flex; align-items: center; justify-content: space-between; gap: 16px;
     text-decoration: none; transition: border-color .15s;
   }
   .ev-resource-card:hover { border-color: #3A2010; }
-  .ev-resource-info h3 { font-size: 15px; font-weight: 500; color: #FBF0E0; margin-bottom: 2px; }
-  .ev-resource-info p { font-size: 13px; color: #6B5749; }
+  .ev-resource-info h3 { font-size: 14px; font-weight: 500; color: #FBF0E0; margin-bottom: 1px; }
+  .ev-resource-info p { font-size: 12.5px; color: #6B5749; line-height: 1.35; }
+  /* Scoped so the tighter header spacing applies to the resource list only. */
+  .ev-page-resources .ev-section-sub { margin-bottom: 18px; }
   .ev-resource-kind {
     font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
     color: #C8956C; white-space: nowrap;
@@ -1991,7 +2032,7 @@ function CampGallery({ isAdmin }) {
   const canDelete = image => isAdmin || (image.uploadedBy && image.uploadedBy === me.current);
 
   return (
-    <div style={{ marginTop: 44 }}>
+    <div style={{ marginTop: 26 }}>
       <h2 className="ev-gallery-h">Camp Gallery</h2>
       <p className="ev-section-sub" style={{ marginBottom: 20 }}>
         Logos, flyers, signage, anything camp. Post what you've got and vote on the rest —
@@ -2191,7 +2232,7 @@ function CampGallery({ isAdmin }) {
 
 function ResourcesPage({ resources, isAdmin }) {
   return (
-    <div className="ev-page">
+    <div className="ev-page ev-page-resources">
       <h1 className="ev-section-h">Resources</h1>
       <p className="ev-section-sub">Everything you need for the event.</p>
       {resources.length === 0 && (
@@ -2265,7 +2306,9 @@ function PackingPage({ items, checks, setChecks }) {
   const essentialsDone = essentials.filter(i => checks[i]).length;
 
   return (
-    <div className="ev-page">
+    <div className="ev-page ev-page-packing">
+      <div className="ev-rail ev-rail-l" aria-hidden="true" />
+      <div className="ev-rail ev-rail-r" aria-hidden="true" />
       <h1 className="ev-section-h">Packing List</h1>
       <p className="ev-section-sub">
         {done === 0
