@@ -5,6 +5,7 @@ import {
   loadGalleryVotes, setGalleryVote, galleryPublicUrl,
   GALLERY_ACCEPT,
 } from './storage';
+import PlayaDataPage from './PlayaData';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -3519,6 +3520,7 @@ export default function App() {
     { id: 'rideShare', label: 'Ride Share' },
     { id: 'packing', label: 'Packing' },
     { id: 'dates', label: 'Dates' },
+    { id: 'playa', label: 'On Playa' },
     { id: 'resources', label: 'Resources' },
     { id: 'campNeeds', label: 'Camp Needs' },
     { id: 'admin', label: 'Admin' },
@@ -3616,6 +3618,7 @@ export default function App() {
       {page === 'shifts' && <ShiftsPage config={config} />}
       {page === 'rideShare' && <RideSharePage />}
       {page === 'dates' && <DatesPage calendar={calendar} />}
+      {page === 'playa' && <PlayaDataPage />}
       {page === 'resources' && <ResourcesPage resources={resources} isAdmin={isAdmin} />}
       {page === 'packing' && (
         <PackingPage
