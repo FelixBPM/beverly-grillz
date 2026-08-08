@@ -191,10 +191,120 @@ function Thumb({ item }) {
 }
 
 // ------------------------------------------------------------
+// DETAIL MODAL
+// ------------------------------------------------------------
+// The list rows are deliberately compact so you can scan 1,400 camps. This is
+// where the full record lives: the photo at a size worth looking at, and the
+// description untruncated.
+
+function DetailModal({ item, kind, archive, onClose }) {
+  // Escape closes, and the body must not scroll behind the overlay.
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  if (!item) return null;
+  const img = item.images?.[0]?.thumbnail_url;
+
+  return (
+    <div
+      className="ev-modal-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={item.name || item.title}
+    >
+      <div
+        className="ev-modal"
+        onClick={e => e.stopPropagation()}
+        style={{ maxWidth: 620, textAlign: 'left', maxHeight: '86vh', overflowY: 'auto' }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: 'sticky', top: 0, float: 'right', marginLeft: 12,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#9A8574', fontSize: 26, lineHeight: 1, padding: 0,
+          }}
+        >
+          ×
+        </button>
+
+        {img && (
+          // The API only publishes one thumbnail per record, and it is a
+          // fixed-width CDN render — so this is shown as large as it can go
+          // without upscaling into mush.
+          <img
+            src={img}
+            alt={item.name || item.title || ''}
+            style={{
+              width: '100%', maxHeight: 340, objectFit: 'cover',
+              borderRadius: 10, border: '1px solid #2A1810',
+              background: '#0F0805', marginBottom: 16,
+            }}
+          />
+        )}
+
+        <h2 style={{
+          fontFamily: 'Cormorant Garamond, serif', fontSize: 28,
+          color: '#FBF0E0', marginBottom: 6, lineHeight: 1.2,
+        }}>
+          {item.name || item.title}
+        </h2>
+
+        {(item.artist || item.hometown) && (
+          <p style={{ color: '#C8956C', fontSize: 14, marginBottom: 4 }}>
+            {item.artist}
+            {item.artist && item.hometown ? ' · ' : ''}
+            {item.hometown}
+          </p>
+        )}
+
+        {!archive && (
+          <p style={{ fontSize: 14, marginBottom: 12 }}>
+            <Placement record={item} kind={kind} archive={archive} />
+          </p>
+        )}
+
+        {item.description && (
+          <p style={{ color: '#C8B49E', fontSize: 15, lineHeight: 1.65, marginTop: 12 }}>
+            {item.description}
+          </p>
+        )}
+
+        {item.landmark && (
+          <p style={{ color: '#9A8574', fontSize: 13.5, marginTop: 12, fontStyle: 'italic' }}>
+            Look for: {item.landmark}
+          </p>
+        )}
+
+        <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {item.url && (
+            <a href={item.url} target="_blank" rel="noopener noreferrer"
+               className="ev-btn ev-btn-ghost" style={{ textDecoration: 'none' }}>
+              Their website ↗
+            </a>
+          )}
+          <button className="ev-btn ev-btn-ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
 // LIST
 // ------------------------------------------------------------
 
-function ResultList({ items, kind, archive, renderMeta }) {
+function ResultList({ items, kind, archive, renderMeta, onOpen }) {
   const [shown, setShown] = useState(PAGE_SIZE);
 
   // Any change to the result set resets paging, so a new search never lands
@@ -216,7 +326,11 @@ function ResultList({ items, kind, archive, renderMeta }) {
         <div
           key={item.uid}
           className="ev-resource-card"
-          style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpen(item)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item); } }}
+          style={{ display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
         >
           {/* Official BMorg-hosted thumbnail, straight from the API payload —
               no scraping, no guessing which photo belongs to which piece.
@@ -357,8 +471,10 @@ export default function PlayaDataPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ camps: [], art: [], events: [], vehicles: [], ourCamp: null });
   const [meta, setMeta] = useState(null);
+  const [vehicleMeta, setVehicleMeta] = useState(null);
   const [tab, setTab] = useState('camps');
   const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -372,7 +488,10 @@ export default function PlayaDataPage() {
         load(`bm:${year}:camps`, [], true),
         load(`bm:${year}:art`, [], true),
         load(`bm:${year}:events`, [], true),
-        load(`bm:${year}:vehicles`, [], true),
+        // Art cars live under their own key, not a year-scoped one: they come
+        // from BMorg's current-year directory rather than the archive, so they
+        // are 2026 even while camps and art are still showing 2025.
+        load('bm:vehicles', null, true),
         load(`bm:${year}:ourCamp`, null, true),
         load(`bm:${year}:meta`, null, true),
       ]);
@@ -381,9 +500,10 @@ export default function PlayaDataPage() {
         camps: Array.isArray(camps) ? camps : [],
         art: Array.isArray(art) ? art : [],
         events: Array.isArray(events) ? events : [],
-        vehicles: Array.isArray(vehicles) ? vehicles : [],
+        vehicles: Array.isArray(vehicles?.items) ? vehicles.items : [],
         ourCamp,
       });
+      setVehicleMeta(vehicles && !Array.isArray(vehicles) ? vehicles : null);
       setMeta(m || current);
       setLoading(false);
     })();
@@ -433,6 +553,15 @@ export default function PlayaDataPage() {
         The Black Rock City directory — camps, art, and events, searchable.
       </p>
 
+      {selected && (
+        <DetailModal
+          item={selected}
+          kind={kindForTab}
+          archive={archive && tab !== 'vehicles'}
+          onClose={() => setSelected(null)}
+        />
+      )}
+
       {loading ? (
         <p style={{ color: '#6B5749', fontSize: 14, fontStyle: 'italic' }}>Checking the playa…</p>
       ) : !data.camps.length && !data.art.length && !data.events.length ? (
@@ -461,7 +590,11 @@ export default function PlayaDataPage() {
           {data.ourCamp && (
             <div
               className="ev-resource-card"
-              style={{ display: 'block', borderColor: 'rgba(200,149,108,0.5)' }}
+              role="button"
+              tabIndex={0}
+              onClick={() => setSelected(data.ourCamp)}
+              onKeyDown={e => { if (e.key === 'Enter') setSelected(data.ourCamp); }}
+              style={{ display: 'block', borderColor: 'rgba(200,149,108,0.5)', cursor: 'pointer' }}
             >
               <div className="ev-resource-info">
                 <h3 style={{ color: '#C8956C' }}>★ {data.ourCamp.name}</h3>
@@ -572,14 +705,14 @@ export default function PlayaDataPage() {
 
           {tab === 'camps' && (
             <ResultList
-              items={filteredCamps} kind="camps" archive={archive}
+              items={filteredCamps} kind="camps" archive={archive} onOpen={setSelected}
               renderMeta={c => c.hometown ? <p>{c.hometown}</p> : null}
             />
           )}
 
           {tab === 'art' && (
             <ResultList
-              items={filteredArt} kind="art" archive={archive}
+              items={filteredArt} kind="art" archive={archive} onOpen={setSelected}
               renderMeta={a => (
                 <p>{a.artist}{a.hometown ? ` · ${a.hometown}` : ''}</p>
               )}
@@ -620,10 +753,20 @@ export default function PlayaDataPage() {
                 </div>
               </div>
             ) : (
-              <ResultList
-                items={filteredVehicles} kind="vehicles" archive={archive}
-                renderMeta={v => v.hometown ? <p>{v.hometown}</p> : null}
-              />
+              <>
+                <p style={{ color: '#9A8574', fontSize: 12.5, marginBottom: 12 }}>
+                  {vehicleMeta?.count || data.vehicles.length} vehicles registered for{' '}
+                  {vehicleMeta?.year || BM_YEAR}, from{' '}
+                  <a href={vehicleMeta?.sourceUrl || 'https://burningman.org/black-rock-city/black-rock-city-2026/2026-mutant-vehicles/'}
+                     target="_blank" rel="noopener noreferrer" style={{ color: '#C8956C' }}>
+                    Burning Man's official DMV directory
+                  </a>. Art cars roam, so they have no address.
+                </p>
+                <ResultList
+                  items={filteredVehicles} kind="vehicles" archive={archive} onOpen={setSelected}
+                  renderMeta={v => v.hometown ? <p>{v.hometown}</p> : null}
+                />
+              </>
             )
           )}
 

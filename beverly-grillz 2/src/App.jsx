@@ -3175,7 +3175,12 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
   }
 
   return (
-    <div className="ev-page">
+    <div className="ev-page ev-page-packing">
+      {/* Same playa-sunrise rails as the Packing page. Affirmations is another
+          long single-column read, so the margins are dead space the photo can
+          fill without competing with the text. */}
+      <div className="ev-rail ev-rail-l" aria-hidden="true" />
+      <div className="ev-rail ev-rail-r" aria-hidden="true" />
       <h1 className="ev-section-h">Camp Affirmations</h1>
       {pendingApplication && (
         <div style={{ background: 'rgba(200,149,108,0.08)', border: '1px solid #C8956C', borderRadius: 10, padding: '12px 16px', marginBottom: 24 }}>
