@@ -162,6 +162,35 @@ function Placement({ record, kind, archive }) {
 }
 
 // ------------------------------------------------------------
+// THUMBNAIL
+// ------------------------------------------------------------
+// 315 of 341 art pieces and 923 camps ship an official image URL in the API
+// payload (burningman.widen.net). Using those beats searching the web for a
+// matching photo: it is authoritative, correctly paired with the record, and
+// carries no licensing question. Records without one simply render no image
+// rather than a broken frame or a wrong picture.
+
+function Thumb({ item }) {
+  const [failed, setFailed] = useState(false);
+  const url = item.images?.[0]?.thumbnail_url;
+  if (!url || failed) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      style={{
+        width: 84, height: 84, flexShrink: 0,
+        objectFit: 'cover', borderRadius: 8,
+        border: '1px solid #2A1810', background: '#0F0805',
+      }}
+    />
+  );
+}
+
+// ------------------------------------------------------------
 // LIST
 // ------------------------------------------------------------
 
@@ -184,8 +213,17 @@ function ResultList({ items, kind, archive, renderMeta }) {
   return (
     <>
       {items.slice(0, shown).map(item => (
-        <div key={item.uid} className="ev-resource-card" style={{ display: 'block' }}>
-          <div className="ev-resource-info">
+        <div
+          key={item.uid}
+          className="ev-resource-card"
+          style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}
+        >
+          {/* Official BMorg-hosted thumbnail, straight from the API payload —
+              no scraping, no guessing which photo belongs to which piece.
+              lazy + async decoding so a 300-item list does not fetch 300
+              images before first paint. */}
+          <Thumb item={item} />
+          <div className="ev-resource-info" style={{ flex: 1, minWidth: 0 }}>
             <h3>{item.name || item.title}</h3>
             {renderMeta(item)}
             {item.description && <p style={{ marginTop: 6 }}>{item.description}</p>}
@@ -399,12 +437,17 @@ export default function PlayaDataPage() {
         <>
           {archive && (
             <div style={{
-              border: '1px solid rgba(200,149,108,0.3)', borderRadius: 10,
-              padding: '10px 14px', marginBottom: 14,
-              color: '#9A8574', fontSize: 13,
+              border: '1px solid rgba(200,149,108,0.45)',
+              background: 'rgba(200,149,108,0.06)',
+              borderRadius: 12,
+              padding: '18px 22px', marginBottom: 20,
+              color: '#C8B49E',
+              fontFamily: 'Cormorant Garamond, serif',
+              fontSize: 22, lineHeight: 1.45,
             }}>
-              Showing the <strong style={{ color: '#C8956C' }}>{year}</strong> directory.
-              This swaps to {BM_YEAR} automatically once the live sync runs.
+              Showing the <strong style={{ color: '#C8956C' }}>{year} Directory</strong>.
+              <br />
+              {BM_YEAR} will automatically update when available.
             </div>
           )}
 

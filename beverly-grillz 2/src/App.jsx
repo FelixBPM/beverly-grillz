@@ -330,28 +330,38 @@ const CSS = `
      low-resolution. z-index -1 keeps it behind all page content. */
   .ev-rail {
     position: fixed; top: 0; bottom: 0; z-index: -1;
-    width: clamp(130px, 15vw, 300px);
+    /* Widened so the photo actually reads as a photo. At 15vw it was a thin
+       strip of colour; at 26vw you can see the sky and the horizon line. */
+    width: clamp(210px, 26vw, 520px);
     background-image: url('/playa-sun.jpg');
     background-size: cover; background-position: center;
-    filter: blur(4px) saturate(1.05);
-    opacity: .45;
+    /* Much less blur and more opacity than before -- the whole point is to
+       see the photo. Kept slightly soft so it stays background, not subject,
+       and so the small source image never looks pixel-thin. */
+    filter: blur(1.5px) saturate(1.08);
+    opacity: .72;
     pointer-events: none;
   }
-  /* The mask fades each rail out toward the middle of the screen so the text
-     column never sits on top of busy pixels. The right rail is flipped, which
-     flips its mask with it -- so it fades inward from the right edge. */
+  /* The two rails are mirror images of each other: the right one is flipped
+     horizontally, so the sun and horizon run outward from the centre in both
+     directions and the page reads as symmetrical. Flipping also flips the
+     mask, which is why both rules use the same gradient -- each fades from
+     its own outer edge toward the middle.
+     The fade now reaches further in (65%) so the photo carries well under the
+     margins before it clears the text column. */
   .ev-rail-l {
     left: 0;
-    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
-    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.82) 40%, rgba(0,0,0,.35) 65%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.82) 40%, rgba(0,0,0,.35) 65%, transparent 100%);
   }
   .ev-rail-r {
     right: 0; transform: scaleX(-1);
-    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
-    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.82) 40%, rgba(0,0,0,.35) 65%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 0%, rgba(0,0,0,.82) 40%, rgba(0,0,0,.35) 65%, transparent 100%);
   }
-  /* Narrower than this and the rails would crowd the 720px text column. */
-  @media (max-width: 1080px) { .ev-rail { display: none; } }
+  /* Below this the wider rails would sit under the 720px text column itself,
+     which hurts readability more than the photo helps. */
+  @media (max-width: 1000px) { .ev-rail { display: none; } }
 
   /* --- BUTTONS --- */
   .ev-btn {
