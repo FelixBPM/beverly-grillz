@@ -355,7 +355,7 @@ function EventList({ events, campsByUid, archive }) {
 
 export default function PlayaDataPage() {
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState({ camps: [], art: [], events: [], ourCamp: null });
+  const [data, setData] = useState({ camps: [], art: [], events: [], vehicles: [], ourCamp: null });
   const [meta, setMeta] = useState(null);
   const [tab, setTab] = useState('camps');
   const [query, setQuery] = useState('');
@@ -368,10 +368,11 @@ export default function PlayaDataPage() {
       const current = await load('bm:current', null, true);
       const year = current?.year || BM_YEAR;
 
-      const [camps, art, events, ourCamp, m] = await Promise.all([
+      const [camps, art, events, vehicles, ourCamp, m] = await Promise.all([
         load(`bm:${year}:camps`, [], true),
         load(`bm:${year}:art`, [], true),
         load(`bm:${year}:events`, [], true),
+        load(`bm:${year}:vehicles`, [], true),
         load(`bm:${year}:ourCamp`, null, true),
         load(`bm:${year}:meta`, null, true),
       ]);
@@ -380,6 +381,7 @@ export default function PlayaDataPage() {
         camps: Array.isArray(camps) ? camps : [],
         art: Array.isArray(art) ? art : [],
         events: Array.isArray(events) ? events : [],
+        vehicles: Array.isArray(vehicles) ? vehicles : [],
         ourCamp,
       });
       setMeta(m || current);
@@ -399,6 +401,7 @@ export default function PlayaDataPage() {
   const filteredCamps = useSearch(data.camps, tab === 'camps' ? query : '');
   const filteredArt = useSearch(data.art, tab === 'art' ? query : '');
   const filteredEvents = useSearch(data.events, tab === 'events' ? query : '');
+  const filteredVehicles = useSearch(data.vehicles, tab === 'vehicles' ? query : '');
 
   const archive = !!meta?.isArchive;
   const year = meta?.year || BM_YEAR;
@@ -407,8 +410,11 @@ export default function PlayaDataPage() {
     { id: 'camps', label: 'Camps', n: data.camps.length },
     { id: 'art', label: 'Art', n: data.art.length },
     { id: 'events', label: 'Events', n: data.events.length },
+    { id: 'vehicles', label: 'Art Cars', n: data.vehicles.length },
   ];
 
+  // 'vehicles' intentionally has no embargo kind — art cars roam and have no
+  // address, so there is never anything to withhold.
   const kindForTab = { camps: 'camps', art: 'art', events: 'events' }[tab];
   const held = !archive && !locationsReleased(kindForTab);
 
@@ -416,6 +422,7 @@ export default function PlayaDataPage() {
     camps: filteredCamps.length,
     art: filteredArt.length,
     events: filteredEvents.length,
+    vehicles: filteredVehicles.length,
   };
 
   return (
@@ -508,6 +515,7 @@ export default function PlayaDataPage() {
               placeholder={
                 tab === 'camps' ? 'Search 1,000+ camps by name, city, or what they offer'
                 : tab === 'art' ? 'Search art by title, artist, or hometown'
+                : tab === 'vehicles' ? 'Search art cars by name, city, or description'
                 : 'Search events by title, host camp, or type'
               }
               value={query}
@@ -582,6 +590,30 @@ export default function PlayaDataPage() {
             <EventList
               events={filteredEvents} campsByUid={campsByUid} archive={archive}
             />
+          )}
+
+          {tab === 'vehicles' && (
+            data.vehicles.length === 0 ? (
+              <div style={{
+                border: '1px solid rgba(200,149,108,0.3)',
+                borderRadius: 10, padding: '18px 20px',
+                color: '#9A8574', fontSize: 14, lineHeight: 1.6,
+              }}>
+                <strong style={{ color: '#C8956C' }}>Art cars arrive with the {BM_YEAR} sync.</strong>
+                <div style={{ marginTop: 6 }}>
+                  Burning Man's free public archive publishes camps, art and
+                  events, but not mutant vehicles — those only come from the
+                  live API, which needs the {BM_YEAR} key. The sync already
+                  knows how to fetch them and this tab fills itself in on the
+                  first live run.
+                </div>
+              </div>
+            ) : (
+              <ResultList
+                items={filteredVehicles} kind="vehicles" archive={archive}
+                renderMeta={v => v.hometown ? <p>{v.hometown}</p> : null}
+              />
+            )
           )}
 
           {/* Attribution is a condition of the API terms of service. */}
