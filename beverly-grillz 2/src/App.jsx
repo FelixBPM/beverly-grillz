@@ -7,6 +7,7 @@ import {
 } from './storage';
 import PlayaDataPage from './PlayaData';
 import PrinciplesPage from './Principles';
+import PlayaBanner from './PlayaBanner';
 
 // ============================================================
 // DEFAULT DATA — admins can change everything from the Admin tab
@@ -2300,40 +2301,7 @@ function ResourcesPage({ resources, isAdmin }) {
 
       <CampGallery isAdmin={isAdmin} />
 
-      {/* Full-bleed sunrise panorama closing the page. The 100vw / calc trick
-          breaks it out of the centred .ev-page column so it spans the whole
-          window; the source is 4.4:1, so the height is capped and the image
-          crops from the centre rather than letterboxing on narrow screens.
-          The top fade blends it into the page instead of starting on a hard
-          edge. */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'relative',
-          width: '100vw',
-          left: '50%',
-          marginLeft: '-50vw',
-          marginTop: 40,
-          marginBottom: -40,
-          lineHeight: 0,
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, #000 14%)',
-          maskImage: 'linear-gradient(to bottom, transparent 0%, #000 14%)',
-        }}
-      >
-        <img
-          src="/playa-panorama.jpg"
-          alt=""
-          loading="lazy"
-          decoding="async"
-          style={{
-            display: 'block',
-            width: '100%',
-            height: 'clamp(150px, 22vw, 300px)',
-            objectFit: 'cover',
-            objectPosition: 'center 45%',
-          }}
-        />
-      </div>
+      <PlayaBanner />
     </div>
   );
 }
@@ -2533,6 +2501,12 @@ function DatesPage({ calendar }) {
           </span>
         </span>
       </div>
+
+      {/* Sits directly under the giraffe strip, so he moonwalks along the
+          horizon rather than into empty space. Tighter top margin than the
+          other pages because the strip already supplies its own breathing
+          room. */}
+      <PlayaBanner marginTop={16} />
     </div>
   );
 }

@@ -6,6 +6,8 @@
 // reproduced verbatim — it is short, it is quoted everywhere, and paraphrasing
 // it would be its own small vandalism.
 
+import PlayaBanner from './PlayaBanner';
+
 const PRINCIPLES = [
   {
     name: 'Radical Inclusion',
@@ -132,6 +134,8 @@ export default function PrinciplesPage() {
         </a>
         .
       </p>
+
+      <PlayaBanner />
     </div>
   );
 }
