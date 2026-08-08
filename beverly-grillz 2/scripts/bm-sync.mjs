@@ -379,7 +379,13 @@ async function main() {
   // Archive years are finished, so applyEmbargo is a no-op for them — but it
   // is still called rather than skipped, so there is exactly ONE code path
   // that data can travel down. A second "trusted" path is how leaks happen.
-  const embargoAt = isArchive ? new Date('2000-01-01T00:00:00Z') : now;
+  // A far-FUTURE sentinel, not a past one. locationsReleased() asks
+  // `now >= releaseDate`, so passing an early date says "the release has not
+  // happened yet" and strips everything — the exact opposite of what a
+  // finished year needs. This was a live bug: the first 2025 sync landed with
+  // every placement stripped. Keep the sentinel in the future.
+  const ARCHIVE_ALREADY_RELEASED = new Date('2999-01-01T00:00:00Z');
+  const embargoAt = isArchive ? ARCHIVE_ALREADY_RELEASED : now;
   const pub = {
     camps: applyEmbargo('camps', camps, embargoAt),
     art: applyEmbargo('art', art, embargoAt),

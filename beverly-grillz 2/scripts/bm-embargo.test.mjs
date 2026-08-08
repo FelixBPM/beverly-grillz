@@ -110,3 +110,21 @@ check('deeply nested placements are caught', () => {
 });
 
 console.log(`\n${passed} checks passed${process.exitCode ? ' (with failures above)' : ''}\n`);
+
+// ---- regression: archive sentinel direction ----
+// The first live 2025 sync stripped every placement because the archive path
+// passed a far-PAST date to a "now >= release" comparison. Past = not yet
+// released. Assert the direction explicitly so it cannot silently flip back.
+console.log('\narchive sentinel');
+check('a far-past date means NOT released (this is the trap)', () => {
+  assert.equal(locationsReleased('camps', new Date('2000-01-01T00:00:00Z')), false);
+});
+check('a far-future date is what marks a finished year as released', () => {
+  assert.equal(locationsReleased('camps', new Date('2999-01-01T00:00:00Z')), true);
+  assert.equal(locationsReleased('art', new Date('2999-01-01T00:00:00Z')), true);
+});
+check('archive records keep their placement under the future sentinel', () => {
+  const [out] = applyEmbargo('camps', [CAMP], new Date('2999-01-01T00:00:00Z'));
+  assert.equal(out.location_string, '7:30 & E', 'archive placement was stripped');
+  assert.equal(out.locationEmbargoed, false);
+});
