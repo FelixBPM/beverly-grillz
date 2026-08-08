@@ -10,10 +10,14 @@
          letter loses most of its pixel budget to empty margin. The .ico is the
          fallback and is also what a browser fetches from /favicon.ico without
          being told to. -->
-    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
-    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
-    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- ?v=orange is a cache-buster, not decoration. Chrome keeps favicons in a
+         store of its own that ignores Cache-Control, so replacing the file is not
+         enough - the URL has to change for the browser to go and look again.
+         Bump this string if the icon is ever recoloured. -->
+    <link rel="icon" href="/favicon-32.png?v=orange" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png?v=orange" type="image/png" sizes="16x16" />
+    <link rel="icon" href="/favicon.ico?v=orange" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=orange" />
     <meta name="description" content="Beverly Grillz — Burning Man 2026 camp hub: applications, shifts, packing and camp info." />
     <style>
       html, body, #root { margin: 0; padding: 0; min-height: 100%; background: #0F0805; }
