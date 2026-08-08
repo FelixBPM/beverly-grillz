@@ -1,0 +1,75 @@
+# .github/workflows/bm-sync.yml
+#
+# Pulls the Black Rock City directory into Supabase, so the site reads it from
+# kv_store like everything else. Runs on GitHub rather than in the browser
+# because the Burning Man API key must never reach the client bundle.
+#
+# TWO MODES
+#   scheduled / plain dispatch  -> live API, needs BM_API_KEY, applies embargo
+#   dispatch with archive_year  -> free public archive, NO KEY NEEDED
+#
+# Use the archive mode to fill the site with real data before a live key
+# exists: Actions tab -> "Burning Man data sync" -> Run workflow -> type 2025.
+#
+# SECRETS (Settings -> Secrets and variables -> Actions)
+#   BM_API_KEY                  only needed for live mode
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_ROLE_KEY
+#
+# Do NOT put these in Cloudflare env vars — those feed the client build and
+# anything reachable from the browser bundle is public.
+
+name: Burning Man data sync
+
+on:
+  schedule:
+    # 09:15 UTC = 02:15 Pacific. Off the hour on purpose: everything that
+    # picks :00 hits the API at the same moment.
+    - cron: '15 9 * * *'
+  workflow_dispatch:
+    inputs:
+      archive_year:
+        description: 'Load a PAST year from the free archive (e.g. 2025). Leave blank for live API.'
+        required: false
+        default: ''
+
+concurrency:
+  group: bm-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Matches the deploy workflow's Node version.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # native fetch; the script has zero npm deps
+
+      - name: Verify embargo logic before touching production data
+        working-directory: 'beverly-grillz 2/scripts'
+        run: |
+          node bm-embargo.test.mjs
+          node bm-leak-test.mjs
+          node tripwire-check.mjs
+
+      - name: Sync
+        working-directory: 'beverly-grillz 2/scripts'
+        env:
+          BM_API_KEY: ${{ secrets.BM_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BM_YEAR: '2026'
+          BM_CAMP_NAME: 'Beverly Grillz'
+          ARCHIVE_YEAR: ${{ github.event.inputs.archive_year }}
+        run: |
+          if [ -n "$ARCHIVE_YEAR" ]; then
+            echo "Archive mode: $ARCHIVE_YEAR (no API key used)"
+            node bm-sync.mjs --archive "$ARCHIVE_YEAR"
+          else
+            echo "Live mode: 2026"
+            node bm-sync.mjs
+          fi
