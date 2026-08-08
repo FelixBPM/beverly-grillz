@@ -599,13 +599,24 @@ export default function PlayaDataPage() {
                 borderRadius: 10, padding: '18px 20px',
                 color: '#9A8574', fontSize: 14, lineHeight: 1.6,
               }}>
-                <strong style={{ color: '#C8956C' }}>Art cars arrive with the {BM_YEAR} sync.</strong>
-                <div style={{ marginTop: 6 }}>
-                  Burning Man's free public archive publishes camps, art and
-                  events, but not mutant vehicles — those only come from the
-                  live API, which needs the {BM_YEAR} key. The sync already
-                  knows how to fetch them and this tab fills itself in on the
-                  first live run.
+                <strong style={{ color: '#C8956C' }}>
+                  495 art cars are registered for {BM_YEAR}.
+                </strong>
+                <div style={{ marginTop: 8 }}>
+                  They land here on the first live sync. Burning Man's free
+                  public archive covers camps, art and events but not mutant
+                  vehicles — those come only from the authenticated API, which
+                  needs the {BM_YEAR} key. The sync already knows how to fetch
+                  them, so this tab fills itself in with no further work.
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <a
+                    href="https://burningman.org/black-rock-city/black-rock-city-2026/2026-mutant-vehicles/"
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ color: '#C8956C', fontWeight: 500 }}
+                  >
+                    Browse the official {BM_YEAR} directory on burningman.org →
+                  </a>
                 </div>
               </div>
             ) : (
