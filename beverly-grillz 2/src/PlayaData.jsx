@@ -582,13 +582,18 @@ export default function PlayaDataPage() {
               background: 'rgba(200,149,108,0.06)',
               borderRadius: 12,
               padding: '18px 22px', marginBottom: 20,
-              color: '#C8B49E',
               fontFamily: 'Cormorant Garamond, serif',
-              fontSize: 22, lineHeight: 1.45,
+              lineHeight: 1.35,
             }}>
-              Showing the <strong style={{ color: '#C8956C' }}>{year} Directory</strong>.
-              <br />
-              {BM_YEAR} will automatically update when available.
+              {/* The headline states what you are looking at; the second line is
+                  a footnote about the future. Sizing and colour say which is
+                  which before either is read. */}
+              <div style={{ color: '#FBF0E0', fontSize: 27 }}>
+                This is the {year} Directory.
+              </div>
+              <div style={{ color: '#9A8574', fontSize: 16, marginTop: 4 }}>
+                {BM_YEAR} will automatically update when available.
+              </div>
             </div>
           )}
 
@@ -634,6 +639,18 @@ export default function PlayaDataPage() {
               unreadable and made the search box look decorative rather than
               usable. This one is a lifted field with a real border, a search
               icon, and a placeholder that can actually be read. */}
+          <label
+            htmlFor="playa-search"
+            style={{
+              display: 'block',
+              fontFamily: 'Cormorant Garamond, serif',
+              fontSize: 24,
+              color: '#FBF0E0',
+              marginBottom: 8,
+            }}
+          >
+            Search
+          </label>
           <div style={{ position: 'relative', marginBottom: 10 }}>
             <span
               aria-hidden="true"
@@ -647,6 +664,7 @@ export default function PlayaDataPage() {
             </span>
             <input
               ref={searchRef}
+              id="playa-search"
               type="search"
               className="bg-playa-search"
               aria-label={`Search ${tab}`}
