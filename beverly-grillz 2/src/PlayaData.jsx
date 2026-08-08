@@ -19,7 +19,7 @@
 // belt-and-braces: if someone runs the sync with a wrong clock or hand-edits a
 // row, the UI still refuses to render a placement early.
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { load } from './storage';
 import {
   BM_YEAR,
@@ -29,6 +29,52 @@ import {
 } from './bm-embargo';
 
 const PAGE_SIZE = 25;
+
+// The app's shared `.ev-input::placeholder` is #4A3020 on a near-black field —
+// 1.64:1 contrast, which is why the search box read as decoration. This scopes
+// a readable placeholder (5.3:1, clears WCAG AA) to this page's search input
+// without touching the shared style used by every form elsewhere in the app.
+const SEARCH_CSS = `
+  .bg-playa-search::placeholder { color: #9A8574; opacity: 1; }
+  .bg-playa-search::-webkit-search-cancel-button { display: none; }
+`;
+
+function InjectSearchCSS() {
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.textContent = SEARCH_CSS;
+    document.head.appendChild(el);
+    return () => document.head.removeChild(el);
+  }, []);
+  return null;
+}
+
+// ------------------------------------------------------------
+// INFINITE SCROLL
+// ------------------------------------------------------------
+// A sentinel div sits below the last row; when it scrolls into view the list
+// grows. rootMargin loads the next page ~500px BEFORE the sentinel is visible,
+// so rows are already there by the time you reach them and the list never
+// visibly stalls. Everything is already in memory — this only controls how
+// many rows are mounted, which is what keeps 4,500 events from freezing the
+// page on first paint.
+function useInfiniteScroll(hasMore, loadMore) {
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!hasMore || !el) return;
+    // Guard for older Safari, where the list simply stays paginated rather
+    // than breaking.
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: '500px 0px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loadMore]);
+  return sentinelRef;
+}
 
 // ------------------------------------------------------------
 // SEARCH
@@ -127,6 +173,10 @@ function ResultList({ items, kind, archive, renderMeta }) {
   const firstKey = items[0]?.uid;
   useEffect(() => { setShown(PAGE_SIZE); }, [items.length, firstKey]);
 
+  const loadMore = useCallback(() => setShown(s => s + PAGE_SIZE), []);
+  const hasMore = items.length > shown;
+  const sentinelRef = useInfiniteScroll(hasMore, loadMore);
+
   if (!items.length) {
     return <p style={{ color: '#6B5749', fontSize: 14 }}>Nothing matches that search.</p>;
   }
@@ -139,24 +189,24 @@ function ResultList({ items, kind, archive, renderMeta }) {
             <h3>{item.name || item.title}</h3>
             {renderMeta(item)}
             {item.description && <p style={{ marginTop: 6 }}>{item.description}</p>}
-            <p style={{ marginTop: 8, fontSize: 13 }}>
-              <Placement record={item} kind={kind} archive={archive} />
-              {item.landmark && (
-                <span style={{ color: '#6B5749' }}> · {item.landmark}</span>
-              )}
-            </p>
+            {/* Placements are deliberately hidden for archive years. A past
+                year's address tells you nothing about where a camp will be
+                this year, and showing it invites someone to plan around a
+                stale location. Only the live year renders an address. */}
+            {!archive && (
+              <p style={{ marginTop: 8, fontSize: 13 }}>
+                <Placement record={item} kind={kind} archive={archive} />
+              </p>
+            )}
           </div>
         </div>
       ))}
-      {items.length > shown && (
-        <button
-          className="ev-btn ev-btn-ghost"
-          style={{ width: '100%', marginTop: 10 }}
-          onClick={() => setShown(s => s + PAGE_SIZE)}
-        >
-          Show {Math.min(PAGE_SIZE, items.length - shown)} more
-          <span style={{ opacity: 0.6 }}> ({items.length - shown} left)</span>
-        </button>
+      {hasMore && (
+        <div ref={sentinelRef} style={{ padding: '18px 0', textAlign: 'center' }}>
+          <span style={{ color: '#6B5749', fontSize: 13, fontStyle: 'italic' }}>
+            Loading more… <span style={{ opacity: 0.6 }}>({(items.length - shown).toLocaleString()} to go)</span>
+          </span>
+        </div>
       )}
     </>
   );
@@ -175,6 +225,7 @@ const TIME_FMT = { hour: 'numeric', minute: '2-digit' };
 function EventList({ events, campsByUid, archive }) {
   const [shown, setShown] = useState(PAGE_SIZE);
   useEffect(() => { setShown(PAGE_SIZE); }, [events.length]);
+  const loadMore = useCallback(() => setShown(s => s + PAGE_SIZE), []);
 
   const rows = useMemo(() => {
     const out = [];
@@ -199,6 +250,10 @@ function EventList({ events, campsByUid, archive }) {
       return a.start - b.start;
     });
   }, [events, campsByUid]);
+
+  // Declared before the early return so hook order stays stable across renders.
+  const hasMore = rows.length > shown;
+  const sentinelRef = useInfiniteScroll(hasMore, loadMore);
 
   if (!rows.length) {
     return <p style={{ color: '#6B5749', fontSize: 14 }}>Nothing matches that search.</p>;
@@ -245,14 +300,12 @@ function EventList({ events, campsByUid, archive }) {
           ))}
         </div>
       ))}
-      {rows.length > shown && (
-        <button
-          className="ev-btn ev-btn-ghost"
-          style={{ width: '100%', marginTop: 4 }}
-          onClick={() => setShown(s => s + PAGE_SIZE)}
-        >
-          Show more <span style={{ opacity: 0.6 }}>({rows.length - shown} left)</span>
-        </button>
+      {hasMore && (
+        <div ref={sentinelRef} style={{ padding: '18px 0', textAlign: 'center' }}>
+          <span style={{ color: '#6B5749', fontSize: 13, fontStyle: 'italic' }}>
+            Loading more… <span style={{ opacity: 0.6 }}>({(rows.length - shown).toLocaleString()} to go)</span>
+          </span>
+        </div>
       )}
     </>
   );
@@ -329,6 +382,7 @@ export default function PlayaDataPage() {
 
   return (
     <div className="ev-page">
+      <InjectSearchCSS />
       <h1 className="ev-section-h">On Playa</h1>
       <p className="ev-section-sub">
         The Black Rock City directory — camps, art, and events, searchable.
@@ -361,8 +415,15 @@ export default function PlayaDataPage() {
             >
               <div className="ev-resource-info">
                 <h3 style={{ color: '#C8956C' }}>★ {data.ourCamp.name}</h3>
+                {/* Same rule as the list: no stale address. On an archive year
+                    this card is just "we're in the directory"; the real
+                    placement appears once the live year is synced. */}
                 <p style={{ marginTop: 4 }}>
-                  <Placement record={data.ourCamp} kind="camps" archive={archive} />
+                  {archive
+                    ? <span style={{ color: '#9A8574', fontSize: 13 }}>
+                        Our listing in the {year} directory
+                      </span>
+                    : <Placement record={data.ourCamp} kind="camps" archive={archive} />}
                 </p>
               </div>
             </div>
@@ -380,33 +441,76 @@ export default function PlayaDataPage() {
             ))}
           </div>
 
-          <input
-            ref={searchRef}
-            className="ev-input"
-            placeholder={
-              tab === 'camps' ? 'Search camps — name, city, what they offer…'
-              : tab === 'art' ? 'Search art — title, artist, hometown…'
-              : 'Search events — title, host, type…'
-            }
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            style={{ marginBottom: 10 }}
-          />
-
-          <p style={{ color: '#9A8574', fontSize: 12.5, marginBottom: 14 }}>
-            {counts[tab]} {counts[tab] === 1 ? 'result' : 'results'}
-            {query && ' · '}
+          {/* The shared .ev-input is deliberately not used here. Its placeholder
+              is #4A3020 on a #0F0805 field — about 1.6:1 contrast, which is
+              unreadable and made the search box look decorative rather than
+              usable. This one is a lifted field with a real border, a search
+              icon, and a placeholder that can actually be read. */}
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute', left: 16, top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#C8956C', fontSize: 17, pointerEvents: 'none',
+              }}
+            >
+              ⌕
+            </span>
+            <input
+              ref={searchRef}
+              type="search"
+              className="bg-playa-search"
+              aria-label={`Search ${tab}`}
+              placeholder={
+                tab === 'camps' ? 'Search 1,000+ camps by name, city, or what they offer'
+                : tab === 'art' ? 'Search art by title, artist, or hometown'
+                : 'Search events by title, host camp, or type'
+              }
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '15px 44px 15px 42px',
+                background: '#1C100A',
+                border: '1.5px solid #4A3020',
+                borderRadius: 10,
+                color: '#FBF0E0',
+                // 16px keeps iOS from zooming the page on focus.
+                fontSize: 16,
+                fontFamily: 'Inter, sans-serif',
+                outline: 'none',
+                transition: 'border-color .15s, background .15s',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = '#C8956C';
+                e.target.style.background = '#231409';
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = '#4A3020';
+                e.target.style.background = '#1C100A';
+              }}
+            />
             {query && (
               <button
+                aria-label="Clear search"
                 onClick={() => { setQuery(''); searchRef.current?.focus(); }}
                 style={{
-                  background: 'none', border: 'none', padding: 0,
-                  color: '#C8956C', cursor: 'pointer', font: 'inherit',
+                  position: 'absolute', right: 10, top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#9A8574', fontSize: 20, lineHeight: 1,
+                  padding: '4px 8px',
                 }}
               >
-                clear
+                ×
               </button>
             )}
+          </div>
+
+          <p style={{ color: '#9A8574', fontSize: 12.5, marginBottom: 14 }}>
+            {counts[tab].toLocaleString()} {counts[tab] === 1 ? 'result' : 'results'}
+            {query ? ` for “${query}”` : ''}
           </p>
 
           {held && (
