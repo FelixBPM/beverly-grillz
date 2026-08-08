@@ -1720,6 +1720,11 @@ function ShiftsPage({ config }) {
         frameBorder="0"
         allowFullScreen
       />
+
+      {/* Its own panorama rather than the shared one, and framed slightly
+          higher: the subject in this shot sits above the horizon line, so
+          centre-45% would crop the top off it. */}
+      <PlayaBanner src="/shifts-panorama.jpg" objectPosition="center 40%" />
     </div>
   );
 }
@@ -3261,6 +3266,14 @@ function CampAgreementsPage({ pendingApplication, onApplicationSubmit }) {
 // CAMP NEEDS PAGE
 // ============================================================
 
+// Kept beside the component rather than inline in the JSX so the list stays
+// easy to edit without picking through markup.
+const CAMP_NEEDS_ITEMS = [
+  { text: 'A 2- or 3-burner outdoor propane gas stove', img: '/needs/stove.jpg' },
+  { text: 'Bar mats — to keep the bar safer, especially in weather', img: '/needs/bar-mat.jpg' },
+  { text: '2 hard rakes', img: '/needs/rake.jpg' },
+];
+
 function CampNeedsPage() {
   return (
     <div className="ev-page">
@@ -3269,10 +3282,27 @@ function CampNeedsPage() {
 
         <div style={{ background: '#0F0805', borderRadius: 10, padding: '1.5rem', border: '1px solid #1E100A' }}>
           <h2 style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '1rem', color: '#C8956C' }}>Items the Camp Needs</h2>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <li>2–3 simple kitchen burners</li>
-            <li>Bar mats — to keep the bar safer, especially in weather</li>
-            <li>2 hard rakes</li>
+          {/* Thumbnails so nobody has to guess what "bar mats" means at the
+              hardware store. The bullet is dropped in favour of the picture
+              doing that job, and each row is a flex pair so long text wraps
+              beside the image rather than under it. */}
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            {CAMP_NEEDS_ITEMS.map(item => (
+              <li key={item.text} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <img
+                  src={item.img}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  style={{
+                    width: 56, height: 56, flexShrink: 0,
+                    objectFit: 'cover', borderRadius: 8,
+                    border: '1px solid #2A1810', background: '#FFF',
+                  }}
+                />
+                <span style={{ lineHeight: 1.45 }}>{item.text}</span>
+              </li>
+            ))}
           </ul>
         </div>
 
@@ -3294,6 +3324,11 @@ function CampNeedsPage() {
         </div>
 
       </div>
+
+      {/* Same sunrise panorama that closes Resources, Dates and the Ten
+          Principles. Sits outside the 640px card column so it still bleeds
+          the full width of the window. */}
+      <PlayaBanner />
     </div>
   );
 }

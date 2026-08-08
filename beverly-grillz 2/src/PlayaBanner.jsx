@@ -13,11 +13,18 @@
 // `left: 50%` and `margin-left: -50vw` breaks an element out of that column
 // and spans it edge to edge regardless of how wide the column is.
 //
-// The source is 4.4:1, so height is clamped and the image crops from the
-// centre instead of letterboxing into a sliver on narrow screens. The top
-// fade blends it into the page rather than starting on a hard seam.
+// Sources are wide panoramas (3:1 to 4.4:1), so height is clamped and the
+// image crops from the centre instead of letterboxing into a sliver on narrow
+// screens. The top fade blends it into the page rather than starting on a hard
+// seam. `src` and `objectPosition` are props because different photos want a
+// different part of the frame kept — the Shifts panorama has its subject
+// higher than the Resources one.
 
-export default function PlayaBanner({ marginTop = 40 }) {
+export default function PlayaBanner({
+  src = '/playa-panorama.jpg',
+  marginTop = 40,
+  objectPosition = 'center 45%',
+}) {
   return (
     <div
       aria-hidden="true"
@@ -34,7 +41,7 @@ export default function PlayaBanner({ marginTop = 40 }) {
       }}
     >
       <img
-        src="/playa-panorama.jpg"
+        src={src}
         alt=""
         loading="lazy"
         decoding="async"
@@ -43,7 +50,7 @@ export default function PlayaBanner({ marginTop = 40 }) {
           width: '100%',
           height: 'clamp(150px, 22vw, 300px)',
           objectFit: 'cover',
-          objectPosition: 'center 45%',
+          objectPosition,
         }}
       />
     </div>
