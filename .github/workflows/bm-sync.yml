@@ -12,12 +12,18 @@
 # exists: Actions tab -> "Burning Man data sync" -> Run workflow -> type 2025.
 #
 # SECRETS (Settings -> Secrets and variables -> Actions)
-#   BM_API_KEY                  only needed for live mode
-#   SUPABASE_URL
-#   SUPABASE_SERVICE_ROLE_KEY
+#   BM_API_KEY   only needed for live mode. Nothing else has to be added:
+#                the repo already carries VITE_SUPABASE_URL and
+#                VITE_SUPABASE_ANON_KEY for the Cloudflare build, and this job
+#                falls back to them.
 #
-# Do NOT put these in Cloudflare env vars — those feed the client build and
-# anything reachable from the browser bundle is public.
+# The anon key is enough because the app itself already writes to kv_store with
+# it (that is how config, shifts and the gallery save). Adding
+# SUPABASE_SERVICE_ROLE_KEY is tidier — it keeps writes off the public key —
+# and this job prefers it automatically if it ever appears.
+#
+# BM_API_KEY must NOT go in Cloudflare env vars — those feed the client build,
+# and anything reachable from the browser bundle is public.
 
 name: Burning Man data sync
 
@@ -60,8 +66,11 @@ jobs:
         working-directory: 'beverly-grillz 2/scripts'
         env:
           BM_API_KEY: ${{ secrets.BM_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Fall back to the secrets the Cloudflare deploy already uses, so
+          # this workflow needs no new configuration to run.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
           BM_YEAR: '2026'
           BM_CAMP_NAME: 'Beverly Grillz'
           ARCHIVE_YEAR: ${{ github.event.inputs.archive_year }}
