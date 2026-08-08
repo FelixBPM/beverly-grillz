@@ -598,6 +598,11 @@ const CSS = `
   }
 
   /* ---- Moonwalking giraffe, bottom of the Dates page ----
+     Slowed 25% on Aug 8. Travel and leg cadence are scaled by the same
+     1.3333 factor on purpose -- change one without the other and his feet
+     stop matching the ground, which reads as skating rather than moonwalking.
+     Current pairing: 9.333s travel against a .693s stride.
+
      He faces right but travels left, which is what sells the moonwalk. The
      legs run a diagonal gait so it reads as walking forward while sliding
      backward. The track is the full width of the strip and he sits at its
@@ -617,7 +622,7 @@ const CSS = `
   .ev-moonwalk-track {
     position: absolute;
     inset: 0;
-    animation: ev-mw-travel 7s linear infinite;
+    animation: ev-mw-travel 9.333s linear infinite;
   }
   @keyframes ev-mw-travel {
     from { transform: translateX(101%); }
@@ -629,17 +634,17 @@ const CSS = `
     bottom: 0;
     display: inline-block;
     transform-origin: bottom center;
-    animation: ev-mw-bob .52s ease-in-out infinite;
+    animation: ev-mw-bob .693s ease-in-out infinite;
   }
   @keyframes ev-mw-bob {
     0%, 100% { transform: translateY(0) rotate(-7deg); }
     50%      { transform: translateY(-3px) rotate(-5deg); }
   }
   .ev-moonwalk-body .ev-leg { transform-box: view-box; }
-  .ev-moonwalk-body .ev-leg-a { transform-origin: 67px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-b { transform-origin: 76px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-c { transform-origin: 24px 90px; animation: ev-mw-legback .52s ease-in-out infinite; }
-  .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .52s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-a { transform-origin: 67px 90px; animation: ev-mw-legfwd .693s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-b { transform-origin: 76px 90px; animation: ev-mw-legback .693s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-c { transform-origin: 24px 90px; animation: ev-mw-legback .693s ease-in-out infinite; }
+  .ev-moonwalk-body .ev-leg-d { transform-origin: 33px 90px; animation: ev-mw-legfwd .693s ease-in-out infinite; }
   @keyframes ev-mw-legfwd  { 0%, 100% { transform: rotate(19deg); }  50% { transform: rotate(-15deg); } }
   @keyframes ev-mw-legback { 0%, 100% { transform: rotate(-15deg); } 50% { transform: rotate(19deg); } }
 
@@ -1812,6 +1817,85 @@ function getVisitorId() {
 // A drag carrying selected text or a link is not an upload. Checking the types
 // list keeps the dropzone from lighting up when someone drags a sentence across
 // the page, and keeps the window-level guard from eating ordinary drags.
+// ------------------------------------------------------------
+// SAVE PHOTO
+// ------------------------------------------------------------
+// "Download" on a phone drops a file into Files, which is not where anyone
+// wants a camp photo. The Web Share API hands the image to the OS share sheet
+// instead, where iOS offers "Save Image" straight into Photos.
+//
+// Two details make or break it:
+//
+// 1. The file is fetched when the lightbox OPENS, not when the button is
+//    tapped. iOS only allows share() during a user gesture, and awaiting a
+//    network fetch inside the handler can spend that activation before the
+//    call lands. Having the File ready means the tap shares immediately.
+// 2. It shares the ORIGINAL, not the 1400px display copy shown on screen —
+//    if someone is keeping a photo, they should get the real one.
+//
+// Where sharing files is unsupported (most desktop browsers) it falls back to
+// a plain download, which is the correct behaviour there anyway.
+
+function SavePhoto({ image }) {
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const url = image?.full;
+  const filename = `beverly-grillz-${(image?.name || 'photo')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'photo'}.jpg`;
+
+  useEffect(() => {
+    let cancelled = false;
+    setFile(null); setDone(false);
+    if (!url || typeof navigator === 'undefined' || !navigator.canShare) return undefined;
+    (async () => {
+      try {
+        const res = await fetch(url, { mode: 'cors' });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const f = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+        if (!cancelled && navigator.canShare({ files: [f] })) setFile(f);
+      } catch {
+        // Leave file null; the download fallback below still works.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [url, filename]);
+
+  const onSave = async () => {
+    if (file) {
+      setBusy(true);
+      try {
+        await navigator.share({ files: [file] });
+        setDone(true);
+      } catch {
+        // Cancelling the share sheet throws; that is not an error.
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    // Desktop path: straight download.
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setDone(true);
+  };
+
+  if (!url) return null;
+  return (
+    <button
+      className="ev-btn ev-btn-ghost ev-btn-small"
+      onClick={onSave}
+      disabled={busy}
+      title={file ? 'Opens the share sheet — choose Save Image' : 'Download the full-size photo'}
+    >
+      {busy ? 'Saving…' : done ? 'Saved ✓' : file ? 'Save to Photos' : 'Save photo'}
+    </button>
+  );
+}
+
 function dragHasFiles(e) {
   const dt = e.dataTransfer;
   if (!dt) return false;
@@ -2234,8 +2318,12 @@ function CampGallery({ isAdmin }) {
                 {lightbox.name ? `Posted by ${lightbox.name}` : 'Anonymous'}
                 {lightbox.width ? ` · ${lightbox.width}×${lightbox.height}` : ''}
                 {lightbox.bytes ? ` · ${(lightbox.bytes / 1048576).toFixed(1)}MB` : ''}
+                <span style={{ display: 'block', opacity: 0.75, marginTop: 2 }}>
+                  On a phone you can also press and hold the photo to save it.
+                </span>
               </span>
               <span style={{ display: 'flex', gap: 8 }}>
+                <SavePhoto image={lightbox} />
                 <a
                   className="ev-btn ev-btn-ghost ev-btn-small"
                   href={lightbox.full}

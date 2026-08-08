@@ -31,6 +31,44 @@ import {
 
 const PAGE_SIZE = 25;
 
+// ------------------------------------------------------------
+// DAILY SHUFFLE
+// ------------------------------------------------------------
+// The archive hands camps back in its own order, which happens to open on
+// "Bag o' Dicks" and "Pussy Day Spa" — a pair that makes a poor first
+// impression of 1,385 camps. Alphabetical would only trade that for a
+// different fixed pair, and would bury anyone whose name starts late.
+//
+// So the list is shuffled — but seeded by the calendar day rather than
+// Math.random(). That matters: a fresh shuffle on every render would reorder
+// the list under your thumb as you scrolled or typed. Seeded by the day, the
+// order is rock steady while you browse and different tomorrow, so over a week
+// everyone gets a turn near the top.
+
+/** mulberry32 — small, fast, good enough for shuffling a list. */
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function dailyShuffle(list) {
+  if (!Array.isArray(list) || list.length < 2) return list || [];
+  // Days since epoch: same value all day, everywhere, no timezone drama.
+  const seed = Math.floor(Date.now() / 86400000);
+  const rand = seededRandom(seed);
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 // The app's shared `.ev-input::placeholder` is #4A3020 on a near-black field —
 // 1.64:1 contrast, which is why the search box read as decoration. This scopes
 // a readable placeholder (5.3:1, clears WCAG AA) to this page's search input
@@ -523,7 +561,10 @@ export default function PlayaDataPage() {
     [data.camps]
   );
 
-  const filteredCamps = useSearch(data.camps, tab === 'camps' ? query : '');
+  // Shuffled once per day, then searched — so results keep the same stable
+  // order rather than jumping around as the query narrows.
+  const shuffledCamps = useMemo(() => dailyShuffle(data.camps), [data.camps]);
+  const filteredCamps = useSearch(shuffledCamps, tab === 'camps' ? query : '');
   const filteredArt = useSearch(data.art, tab === 'art' ? query : '');
   const filteredEvents = useSearch(data.events, tab === 'events' ? query : '');
   const filteredVehicles = useSearch(data.vehicles, tab === 'vehicles' ? query : '');
