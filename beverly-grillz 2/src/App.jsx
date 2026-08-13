@@ -205,6 +205,58 @@ const DEFAULT_CALENDAR = [
 ];
 
 // ============================================================
+// COUNTDOWN TO THE BURN
+// ============================================================
+// Shown on the lock screen, which is the first thing anyone sees.
+//
+// UPDATE THIS EVERY YEAR. It is a constant rather than something parsed out
+// of DEFAULT_CALENDAR on purpose: those entries are free text ("Sept 5",
+// "Aug 30th", "Thu, Aug 6 at 5pm EST"), they carry no year, and admins can
+// edit them from the Admin panel — a stray keystroke there should not be able
+// to break the front door of the site. Keep it in step with the "The Man
+// Burns" row on the Dates page.
+const MAN_BURN_DATE = '2026-09-05'; // Saturday of the 2026 event
+
+// Counting in whole PACIFIC calendar days, not in elapsed hours. Someone in
+// New York opening this at 1am should see the same number as someone in
+// California at 10pm the evening before — the answer to "how many more sleeps"
+// is a date question, not a duration one.
+function daysUntilBurn(now = new Date()) {
+  const pacificToday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now); // en-CA gives YYYY-MM-DD
+  const today = Date.parse(pacificToday + 'T00:00:00Z');
+  const burn = Date.parse(MAN_BURN_DATE + 'T00:00:00Z');
+  if (Number.isNaN(today) || Number.isNaN(burn)) return null;
+  return Math.round((burn - today) / 86400000);
+}
+
+function BurnCountdown() {
+  const days = daysUntilBurn();
+  // Past the burn there is nothing useful to say, so the lock screen simply
+  // goes back to looking the way it did before.
+  if (days == null || days < 0) return null;
+
+  return (
+    <p style={{
+      fontFamily: 'Cormorant Garamond, serif',
+      color: '#C8956C',
+      fontSize: days === 0 ? 21 : 19,
+      margin: '2px 0 14px',
+      lineHeight: 1.3,
+    }}>
+      {days === 0
+        ? 'The Man burns tonight'
+        : <>
+            <strong style={{ fontSize: 30, color: '#FBF0E0' }}>{days}</strong>
+            {days === 1 ? ' day until the Man burns' : ' days until the Man burns'}
+          </>}
+    </p>
+  );
+}
+
+// ============================================================
 // STORAGE HELPERS
 // ============================================================
 
@@ -1004,6 +1056,7 @@ function LockScreen({ config, onUnlock }) {
           </span>
         </div>
         <h1>{config.eventName}</h1>
+        <BurnCountdown />
         <p className={celebrating ? 'ev-lock-dismiss' : undefined}>
           {celebrating ? 'See you on the playa' : 'Contact your organizer for the password'}
         </p>
