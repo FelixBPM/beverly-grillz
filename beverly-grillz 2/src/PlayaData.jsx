@@ -236,10 +236,28 @@ function Thumb({ item }) {
 // where the full record lives: the photo at a size worth looking at, and the
 // description untruncated.
 
-function DetailModal({ item, kind, archive, onClose }) {
-  // Escape closes, and the body must not scroll behind the overlay.
+function DetailModal({ items, index, onStep, kind, archive, onClose }) {
+  const scrollRef = useRef(null);
+  const item = items?.[index] || null;
+  const hasPrev = index > 0;
+  const hasNext = items && index < items.length - 1;
+
+  // `go` must NOT close over `index`. The keydown listener is registered once,
+  // and if the handler captured the current index then holding the arrow key
+  // would fire several presses against the same stale value and only move one
+  // step. Stepping is delegated to the parent, which applies it as a
+  // functional state update, so every press counts.
+  const go = onStep;
+
+  // Escape closes; arrows walk the list. Deliberately does NOT wrap around at
+  // the ends — with 1,385 camps, silently teleporting from the last to the
+  // first reads as a glitch rather than a feature.
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    const onKey = e => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -247,7 +265,28 @@ function DetailModal({ item, kind, archive, onClose }) {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, [onClose, go]);
+
+  // Moving to a new record has to reset the scroll position, or a short entry
+  // after a long one opens already scrolled past its own title.
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [index]);
+
+  // Swipe, because phones have no arrow keys. The vertical guard matters: a
+  // slightly-diagonal scroll up the description should not flick to the next
+  // camp.
+  const touch = useRef(null);
+  const onTouchStart = e => {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchEnd = e => {
+    if (!touch.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.current.x;
+    const dy = t.clientY - touch.current.y;
+    touch.current = null;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.6) go(dx < 0 ? 1 : -1);
+  };
 
   if (!item) return null;
   const img = item.images?.[0]?.thumbnail_url;
@@ -261,9 +300,12 @@ function DetailModal({ item, kind, archive, onClose }) {
       aria-label={item.name || item.title}
     >
       <div
+        ref={scrollRef}
         className="ev-modal"
         onClick={e => e.stopPropagation()}
-        style={{ maxWidth: 620, textAlign: 'left', maxHeight: '86vh', overflowY: 'auto' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        style={{ maxWidth: 620, textAlign: 'left', maxHeight: '86vh', overflowY: 'auto', position: 'relative' }}
       >
         <button
           onClick={onClose}
@@ -338,6 +380,44 @@ function DetailModal({ item, kind, archive, onClose }) {
           )}
           <button className="ev-btn ev-btn-ghost" onClick={onClose}>Close</button>
         </div>
+
+        {/* On-screen arrows as well as the key bindings: phones have no arrow
+            keys, and on desktop nobody discovers a shortcut that is never
+            shown. The counter doubles as a hint that the list is walkable. */}
+        {items && items.length > 1 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, marginTop: 16, paddingTop: 14,
+            borderTop: '1px solid rgba(200,149,108,0.18)',
+          }}>
+            <button
+              className="ev-btn ev-btn-ghost ev-btn-small"
+              onClick={() => go(-1)}
+              disabled={!hasPrev}
+              aria-label="Previous"
+              style={{ opacity: hasPrev ? 1 : 0.35, cursor: hasPrev ? 'pointer' : 'default' }}
+            >
+              ‹ Previous
+            </button>
+
+            <span style={{ color: '#6B5749', fontSize: 12.5, whiteSpace: 'nowrap' }}>
+              {(index + 1).toLocaleString()} of {items.length.toLocaleString()}
+              <span style={{ display: 'block', opacity: 0.75, fontSize: 11.5 }}>
+                ← → or swipe
+              </span>
+            </span>
+
+            <button
+              className="ev-btn ev-btn-ghost ev-btn-small"
+              onClick={() => go(1)}
+              disabled={!hasNext}
+              aria-label="Next"
+              style={{ opacity: hasNext ? 1 : 0.35, cursor: hasNext ? 'pointer' : 'default' }}
+            >
+              Next ›
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -365,14 +445,14 @@ function ResultList({ items, kind, archive, renderMeta, onOpen }) {
 
   return (
     <>
-      {items.slice(0, shown).map(item => (
+      {items.slice(0, shown).map((item, i) => (
         <div
           key={item.uid}
           className="ev-resource-card"
           role="button"
           tabIndex={0}
-          onClick={() => onOpen(item)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item); } }}
+          onClick={() => onOpen(items, i)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(items, i); } }}
           style={{ display: 'flex', gap: 14, alignItems: 'flex-start', cursor: 'pointer' }}
         >
           {/* Official BMorg-hosted thumbnail, straight from the API payload —
@@ -517,7 +597,21 @@ export default function PlayaDataPage() {
   const [vehicleMeta, setVehicleMeta] = useState(null);
   const [tab, setTab] = useState('camps');
   const [query, setQuery] = useState('');
+  // Holds the list being browsed plus a cursor, not just one record — that is
+  // what lets the arrows walk whatever is currently on screen, search filters
+  // included.
   const [selected, setSelected] = useState(null);
+  const openItem = useCallback((items, index) => setSelected({ items, index }), []);
+
+  // Clamped functional update: stable identity, and safe to call as fast as a
+  // held arrow key can fire.
+  const stepItem = useCallback((delta) => {
+    setSelected(sel => {
+      if (!sel) return sel;
+      const next = sel.index + delta;
+      return next >= 0 && next < sel.items.length ? { ...sel, index: next } : sel;
+    });
+  }, []);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -601,7 +695,9 @@ export default function PlayaDataPage() {
 
       {selected && (
         <DetailModal
-          item={selected}
+          items={selected.items}
+          index={selected.index}
+          onStep={stepItem}
           kind={kindForTab}
           archive={archive && tab !== 'vehicles'}
           onClose={() => setSelected(null)}
@@ -643,8 +739,8 @@ export default function PlayaDataPage() {
               className="ev-resource-card"
               role="button"
               tabIndex={0}
-              onClick={() => setSelected(data.ourCamp)}
-              onKeyDown={e => { if (e.key === 'Enter') setSelected(data.ourCamp); }}
+              onClick={() => openItem([data.ourCamp], 0)}
+              onKeyDown={e => { if (e.key === 'Enter') openItem([data.ourCamp], 0); }}
               style={{ display: 'block', borderColor: 'rgba(200,149,108,0.5)', cursor: 'pointer' }}
             >
               <div className="ev-resource-info">
@@ -769,14 +865,14 @@ export default function PlayaDataPage() {
 
           {tab === 'camps' && (
             <ResultList
-              items={filteredCamps} kind="camps" archive={archive} onOpen={setSelected}
+              items={filteredCamps} kind="camps" archive={archive} onOpen={openItem}
               renderMeta={c => c.hometown ? <p>{c.hometown}</p> : null}
             />
           )}
 
           {tab === 'art' && (
             <ResultList
-              items={filteredArt} kind="art" archive={archive} onOpen={setSelected}
+              items={filteredArt} kind="art" archive={archive} onOpen={openItem}
               renderMeta={a => (
                 <p>{a.artist}{a.hometown ? ` · ${a.hometown}` : ''}</p>
               )}
@@ -827,7 +923,7 @@ export default function PlayaDataPage() {
                   </a>. Art cars roam, so they have no address.
                 </p>
                 <ResultList
-                  items={filteredVehicles} kind="vehicles" archive={archive} onOpen={setSelected}
+                  items={filteredVehicles} kind="vehicles" archive={archive} onOpen={openItem}
                   renderMeta={v => v.hometown ? <p>{v.hometown}</p> : null}
                 />
               </>
